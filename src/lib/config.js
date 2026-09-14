@@ -28,10 +28,15 @@ export const CONFIG = {
   /* 多数 CDN 反而更喜欢不带 referer 的图片请求 */
   referrerPolicy: 'no-referrer',
 
-  /* 数据文件的多线路（按顺序降级） */
+  /* 数据文件的多线路（按顺序降级）
+     主线路是「按天分片」：一次查询只加载当天几十 KB；
+     兜底是瘦身搜索索引（几 MB，一次加载后缓存）。 */
   dataRoutes: {
     meta: ['data/meta.json'],
-    month: (m) => [`data/months/${String(m).padStart(2, '0')}.csv`],
+    day: (m, d) => [`data/days/${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}.csv`],
+    index: ['data/search-index.csv'],
+    /* 用 build_dataset.py --single 生成时才存在，可加进来做额外兜底 */
     all: ['data/characters.csv'],
+    month: (m) => [`data/months/${String(m).padStart(2, '0')}.csv`],
   },
 };

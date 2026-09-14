@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  loadMeta, loadMonth, loadAll, displayName, daysInMonth,
+  loadMeta, loadDay, loadIndex, loadAll, displayName, daysInMonth,
 } from './lib/data.js';
 import { applyGlobalPalette, quickPalette, cachedCardPalette, rememberCardPalette } from './lib/palette.js';
 import { routeChain, mountImage, loadedRouteOf } from './lib/images.js';
@@ -47,6 +47,7 @@ export default function App() {
   const [types, setTypes] = useState([]);
   const [nsfw, setNsfw] = useState(false);
   const [selected, setSelected] = useState(-1);
+  const [selectedId, setSelectedId] = useState('');
   const [favs, setFavs] = useState([]);
   const [favOpen, setFavOpen] = useState(false);
   const [pagePalette, setPagePalette] = useState(null);
@@ -89,8 +90,7 @@ export default function App() {
     setSelected(-1);
     setLoading(true);
     try {
-      const monthRows = await loadMonth(mm);
-      setRows(monthRows.filter((r) => r.day === dd));
+      setRows(await loadDay(mm, dd));
     } catch (err) {
       setRows([]);
       if (!silent) notify(err.message);
@@ -164,17 +164,63 @@ export default function App() {
     return list.sort(sorters[sort] || sorters.heat);
   }, [baseRows, types, nsfw, query, sort]);
 
+  // 详情用 id 定位：筛选条件变化、从搜索跳转过来都不会错位
+  const current = selectedId
+    ? (filtered.find((c) => c.id === selectedId)
+      || rows.find((c) => c.id === selectedId)
+      || allRows?.find((c) => c.id === selectedId)
+      || null)
+    : null;
+  const currentIndex = current ? filtered.findIndex((c) => c.id === current.id) : -1;
+
   /* ── 抽屉 ─────────────────────────────────────────── */
   const openDrawer = useCallback((index) => {
     if (index < 0 || index >= filtered.length) return;
     setSelected(index);
+    setSelectedId(filtered[index].id);
     const url = new URL(location.href);
     url.searchParams.set('c', filtered[index].id);
     history.replaceState({}, '', url);
   }, [filtered]);
 
+  /** 搜索结果里点开角色：先跳到 TA 的生日页面（顺便拿到含简介/作品的完整记录），再展开详情 */
+  const openFromSearch = useCallback(async (char) => {
+    setMode('day');
+    setAllRows(null);
+    setQuery('');                 // 关键：清掉搜索词，否则当天列表被过滤，详情找不到目标
+    setMonth(char.month);
+    setDay(char.day);
+    setLoading(true);
+    try {
+      const dayRows = await loadDay(char.month, char.day);
+      setRows(dayRows);
+      const idx = dayRows.findIndex((r) => r.id === char.id);
+      setLoading(false);
+      if (idx >= 0) {
+        setSelected(idx);
+        setSelectedId(char.id);
+        const url = new URL(location.href);
+        url.searchParams.set('m', String(char.month));
+        url.searchParams.set('d', String(char.day));
+        url.searchParams.set('c', char.id);
+        url.searchParams.delete('mode');
+        history.pushState({}, '', url);
+        return;
+      }
+    } catch (err) {
+      setLoading(false);
+      notify(err.message);
+    }
+    const url = new URL(location.href);
+    url.searchParams.set('m', String(char.month));
+    url.searchParams.set('d', String(char.day));
+    url.searchParams.delete('mode');
+    history.pushState({}, '', url);
+  }, [notify]);
+
   const closeDrawer = useCallback(() => {
     setSelected(-1);
+    setSelectedId('');
     const url = new URL(location.href);
     url.searchParams.delete('c');
     history.replaceState({}, '', url);
@@ -194,9 +240,9 @@ export default function App() {
     const onKey = (e) => {
       if (e.key === 'Escape') { closeDrawer(); setFavOpen(false); return; }
       const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-      if (selected >= 0) {
-        if (e.key === 'ArrowLeft' && selected > 0) openDrawer(selected - 1);
-        if (e.key === 'ArrowRight' && selected < filtered.length - 1) openDrawer(selected + 1);
+      if (currentIndex >= 0) {
+        if (e.key === 'ArrowLeft' && currentIndex > 0) openDrawer(currentIndex - 1);
+        if (e.key === 'ArrowRight' && currentIndex < filtered.length - 1) openDrawer(currentIndex + 1);
         return;
       }
       if (typing) return;
@@ -211,7 +257,7 @@ export default function App() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [selected, filtered.length, month, day, openDrawer, closeDrawer, selectDate]);
+  }, [currentIndex, filtered.length, month, day, openDrawer, closeDrawer, selectDate]);
 
   /* ── 浏览器前进 / 后退 ────────────────────────────── */
   useEffect(() => {
@@ -225,7 +271,9 @@ export default function App() {
 
   /* ── 全局搜索 / 导出 / 分享 ───────────────────────── */
   const globalSearch = useCallback(async (setProgress) => {
-    const all = await loadAll((p) => setProgress?.(p));
+    setProgress?.(0.1);
+    const all = await loadIndex();
+    setProgress?.(1);
     setAllRows(all);
     setMode('search');
     const url = new URL(location.href);
@@ -280,9 +328,8 @@ export default function App() {
       quickPalette,
       getState: () => ({ month, day, rows, filtered, meta, mode, favs, selected }),
     };
-  }, [selectDate, openDrawer, closeDrawer, month, day, rows, filtered, meta, mode, favs, selected]);
+  }, [selectDate, openDrawer, closeDrawer, month, day, rows, filtered, meta, mode, favs, selected, selectedId]);
 
-  const current = selected >= 0 ? filtered[selected] : null;
   const heroPalette = pagePalette || (rows.length ? quickPalette(rows[0]) : null);
 
   return (
@@ -323,6 +370,7 @@ export default function App() {
             if ('nsfw' in patch) setNsfw(patch.nsfw);
           }}
           onOpen={openDrawer}
+          onOpenFromSearch={openFromSearch}
           onToggleFav={toggleFav}
           onHover={onHover}
           onExport={() => exportRows(filtered, exportName(mode, month, day, query))}
@@ -342,13 +390,13 @@ export default function App() {
       {current ? (
         <DetailDrawer
           char={current}
-          index={selected}
+          index={currentIndex}
           total={filtered.length}
           palette={cachedCardPalette(current.id) || quickPalette(current)}
           isFav={favIds.has(current.id)}
           onClose={closeDrawer}
-          onPrev={() => openDrawer(selected - 1)}
-          onNext={() => openDrawer(selected + 1)}
+          onPrev={() => openDrawer(currentIndex - 1)}
+          onNext={() => openDrawer(currentIndex + 1)}
           onToggleFav={toggleFav}
           onCopy={(p) => { if (p) { rememberCardPalette(current.id, p); setPagePalette(p); } }}
           onNotify={notify}

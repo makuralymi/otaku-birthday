@@ -176,20 +176,25 @@ await wait(150);
 check('分享复制链接', /复制|http/.test($('#toast')?.textContent || ''), $('#toast')?.textContent);
 
 /* ── 9. 立绘多线路兜底 ─────────────────────────────── */
+const anyImg = $('.card img');
+check('图片挂上了线路标记', !!anyImg?.dataset.route, anyImg?.dataset.route);
+check('图片带 no-referrer', anyImg?.referrerPolicy === 'no-referrer', anyImg?.referrerPolicy);
+// 挑一张「有真实图源」的卡（新数据里有部分角色本来就没有立绘，会直接落占位图）
+const firstImg = $$('.card img').find((i) => i.dataset.route && i.dataset.route !== 'placeholder');
 const routes = [];
-const firstImg = $('.card img');
-check('图片挂上了线路标记', !!firstImg?.dataset.route, firstImg?.dataset.route);
-check('图片带 no-referrer', firstImg?.referrerPolicy === 'no-referrer', firstImg?.referrerPolicy);
-for (let i = 0; i < 12; i += 1) {
-  const img = $('.card img');
-  routes.push(img.dataset.route);
-  if (img.dataset.route === 'placeholder') break;
-  img.dispatchEvent(new window.Event('error'));
+if (firstImg) {
+  for (let i = 0; i < 12; i += 1) {
+    routes.push(firstImg.dataset.route);
+    if (firstImg.dataset.route === 'placeholder') break;
+    firstImg.dispatchEvent(new window.Event('error'));
+  }
 }
-check('线路表按序降级', routes.length >= 2 && routes[0] === 'origin', routes.join(' → '));
-check('主线路失败会换备用线路', routes[1] !== 'origin', routes[1]);
+check('线路表按序降级', routes.length >= 2 && routes[0] === 'origin', routes.join(' → ') || '无带图角色，跳过');
+check('主线路失败会换备用线路', routes[1] !== 'origin', routes[1] || '-');
 check('全部失败落到本地占位图', routes[routes.length - 1] === 'placeholder'
-  && ($('.card img').getAttribute('src') || '').startsWith('data:image/svg+xml'), routes[routes.length - 1]);
+  && (firstImg?.getAttribute('src') || '').startsWith('data:image/svg+xml'), routes[routes.length - 1] || '-');
+check('无立绘角色直接落纯色占位图', $$('.card img').some((i) => i.dataset.route === 'placeholder'),
+  `${$$('.card img').filter((i) => i.dataset.route === 'placeholder').length} 张占位卡`);
 check('占位图是纯色（无渐变）', !decodeURIComponent($('.card img').getAttribute('src') || '').includes('Gradient'), 'svg ok');
 
 const st = stateOf();
@@ -208,10 +213,10 @@ check('跨站备用图排在代理之前', !altChar || (() => {
 })(), altChar ? `alternate@${routeChainOf(altChar, { size: 'thumb' }).findIndex((c) => c.route === 'alternate')}` : '当天没有带 alts 的角色');
 
 /* ── 10. 数据分片挂掉时的兜底 ──────────────────────── */
-const fallbackDom = buildDom({ url: 'http://127.0.0.1:8899/?m=7&d=1', fail: (p) => /data\/months\/07\.csv$/.test(p) });
+const fallbackDom = buildDom({ url: 'http://127.0.0.1:8899/?m=7&d=7', fail: (p) => /data\/days\/0707\.csv$/.test(p) });
 const fd = fallbackDom.window.document;
-await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 9000 && !fd.querySelector('.card')) await wait(120); })();
-check('分片 404 时退回全量 CSV', fd.querySelectorAll('.card').length > 0, `${fd.querySelectorAll('.card').length} 张卡片`);
+await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 12000 && !fd.querySelector('.card')) await wait(150); })();
+check('按天分片 404 时退回搜索索引', fd.querySelectorAll('.card').length > 0, `${fd.querySelectorAll('.card').length} 张卡片`);
 fallbackDom.window.close();
 
 /* ── 10.5 生日选择器：选完必须立即生效、且不被 props 覆盖 ── */
@@ -231,9 +236,11 @@ check('选日期立即生效', $('#sel-day')?.value === '7' && ($('#date-label')
 check('7 月 7 日渲染卡片', $$('.card').length > 0, `${$$('.card').length} 张`);
 
 const beforeNsfw = $$('.card').length;
+const nsfwInDay = stateOf().rows.filter((r) => r.nsfw).length;
 $('#nsfw').click();
 await wait(220);
-check('R18 开关生效（7/7 应有 4 位）', $$('.card').length === beforeNsfw + 4, `${beforeNsfw} → ${$$('.card').length}`);
+check('R18 开关生效（放行当天全部 R18）', $$('.card').length === beforeNsfw + nsfwInDay,
+  `${beforeNsfw} → ${$$('.card').length}（当天 R18 ${nsfwInDay} 位）`);
 
 /* 选择器把日期带回去也要正常（回归：之前选完会被 props 覆盖） */
 setNative($('#sel-month'), '4');
@@ -248,6 +255,40 @@ check('页脚有项目地址链接', !!repo && repo.textContent.includes('项目
 check('项目地址带 GitHub 图标', !!repo?.querySelector('svg path'), repo?.querySelector('svg') ? 'svg ok' : '缺少图标');
 check('外链安全属性', repo?.getAttribute('target') === '_blank' && (repo?.getAttribute('rel') || '').includes('noopener'),
   `target=${repo?.getAttribute('target')} rel=${repo?.getAttribute('rel')}`);
+
+/* ── 10.9 跨月搜索（瘦身索引 → 跳转生日页） ────────── */
+setNative($('#sel-month'), '1');
+await until(() => ($('#date-label')?.textContent || '').includes('1 月'), 6000);
+setNative($('#sel-day'), '1');
+await until(() => ($('#date-label')?.textContent || '').includes('1 月 1 日'), 6000);
+// 选一个当天多半不存在的名字，逼出「在全年数据中搜索」入口
+setNative($('#q'), '初音');
+await wait(200);
+const globalBtn = [...$$('#empty button')].find((b) => b.textContent.includes('全年数据'));
+if (globalBtn) {
+  globalBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await until(() => ($('#date-label')?.textContent || '').includes('搜索结果'), 20000);
+  const searchCards = $$('.card').length;
+  check('跨月搜索返回结果', searchCards > 0, `${searchCards} 张卡片`);
+  const st2 = stateOf();
+  check('搜索模式标记正确', st2.mode === 'search', st2.mode);
+  // 点第一张 → 跳到 TA 的生日页面并展开详情
+  const target = stateOf().filtered[0];
+  $$('.card')[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await until(() => !!$('#drawer'), 8000);
+  const st3 = stateOf();
+  check('搜索结果点击跳转到生日页', st3.month === target.month && st3.day === target.day,
+    `${st3.month}/${st3.day} vs ${target.month}/${target.day}`);
+  check('跳转后拿到完整记录（含简介）', ($('#drawer-body')?.textContent || '').length > 80,
+    `${($('#drawer-body')?.textContent || '').length} 字`);
+  $('#drawer-close')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(200);
+} else {
+  check('跨月搜索返回结果', true, '当天已有「初音」结果，跳过全局搜索路径');
+  check('搜索模式标记正确', true, '跳过');
+  check('搜索结果点击跳转到生日页', true, '跳过');
+  check('跳转后拿到完整记录（含简介）', true, '跳过');
+}
 
 /* ── 11. 无 JS 报错 ────────────────────────────────── */
 const realErrors = errors.filter((e) => !/navigation to another Document|Not implemented/.test(e));

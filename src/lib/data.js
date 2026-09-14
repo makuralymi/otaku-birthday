@@ -9,9 +9,9 @@ import { CONFIG } from './config.js';
 import { loadLocalManifest } from './images.js';
 import { parseCSV } from './csv.js';
 
-const MONTH_CACHE = new Map();
+const DAY_CACHE = new Map();
 let META = null;
-let ALL_CACHE = null;
+let INDEX_CACHE = null;   // 瘦身搜索索引：跨月搜索 + 分片失败兜底
 
 export const pad2 = (n) => String(n).padStart(2, '0');
 export const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
@@ -69,6 +69,7 @@ export function normalize(row) {
     workYear: row.work_year || '',
     works,
     summary: row.summary || '',
+    full: row.summary !== undefined,            // 是否来自完整分片（索引里没有简介）
     heat: +row.heat || 0,
     fav: +row.fav || 0,
     votes: +row.votes || 0,
@@ -107,8 +108,7 @@ export async function loadMeta() {
   try {
     META = await fetchFirst(CONFIG.dataRoutes.meta, { parse: 'json' });
   } catch {
-    const rows = await loadAllFile();
-    META = deriveMeta(rows.map(normalize));
+    META = deriveMeta(await loadIndex());
   }
   return META;
 }
@@ -141,41 +141,39 @@ function deriveMeta(rows) {
   };
 }
 
-/** 某个月的全部角色（分片挂了就退回全量 CSV 再筛） */
-export async function loadMonth(month) {
-  if (MONTH_CACHE.has(month)) return MONTH_CACHE.get(month);
+/** 某一天的全部角色：按天分片（几十 KB），失败则退回搜索索引（瘦身版） */
+export async function loadDay(month, day) {
+  const key = `${month}-${day}`;
+  if (DAY_CACHE.has(key)) return DAY_CACHE.get(key);
   const promise = (async () => {
     try {
-      const text = await fetchFirst(CONFIG.dataRoutes.month(month));
+      const text = await fetchFirst(CONFIG.dataRoutes.day(month, day));
       return parseCSV(text).rows.map(normalize);
     } catch (err) {
-      const all = await loadAllFile();
-      const rows = all.map(normalize).filter((r) => r.month === month);
+      const index = await loadIndex();
+      const rows = index.filter((r) => r.month === month && r.day === day);
       if (!rows.length) throw err;
-      return rows;
+      return rows;   // 索引里没有简介/作品明细，但卡片仍可正常渲染
     }
   })();
-  MONTH_CACHE.set(month, promise);
+  DAY_CACHE.set(key, promise);
   return promise;
 }
 
-/** 全年 12 个月（跨月搜索用） */
-export async function loadAll(onProgress) {
-  const out = [];
-  for (let m = 1; m <= 12; m += 1) {
-    out.push(...(await loadMonth(m)));
-    if (onProgress) onProgress(m / 12);
-  }
-  return out;
-}
-
-/** 全量单文件 CSV（兜底），只解析一次 */
-async function loadAllFile() {
-  if (!ALL_CACHE) {
-    ALL_CACHE = (async () => {
-        const text = await fetchFirst(CONFIG.dataRoutes.all);
-      return parseCSV(text).rows;
+/** 瘦身搜索索引（一次加载，几 MB；用于跨月搜索与兜底） */
+export async function loadIndex() {
+  if (!INDEX_CACHE) {
+    INDEX_CACHE = (async () => {
+      const text = await fetchFirst(CONFIG.dataRoutes.index);
+      return parseCSV(text).rows.map(normalize);
     })();
   }
-  return ALL_CACHE;
+  return INDEX_CACHE;
+}
+
+/** 跨月搜索用的全量数据（= 搜索索引） */
+export async function loadAll(onProgress) {
+  const index = await loadIndex();
+  onProgress?.(1);
+  return index;
 }

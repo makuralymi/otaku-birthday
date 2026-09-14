@@ -11,6 +11,7 @@ import { compact } from '../lib/format.js';
 
 /** 单张角色卡：进入视口后取色 + 多线路加载立绘 */
 export function CharacterCard({ char, index, isFav, onOpen, onToggleFav, onHover, priority }) {
+  // 索引来源的记录（全局搜索）缺少简介/作品明细，点开时由上层跳到当天页面再展开
   const cardRef = useRef(null);
   const imgRef = useRef(null);
   const [palette, setPalette] = useState(() => quickPalette(char));
@@ -113,7 +114,8 @@ const SORTS = [
 
 export default function Results({
   mode, month, day, rows, totalOfDay, baseRows, filtered, filters, meta,
-  loading, onFilterChange, onOpen, onToggleFav, favIds, onHover, onExport, onShare, onGlobalSearch, onReset, onRandom, onNear,
+  loading, onFilterChange, onOpen, onOpenFromSearch, onToggleFav, favIds, onHover,
+  onExport, onShare, onGlobalSearch, onReset, onRandom, onNear,
 }) {
   const [globalLoading, setGlobalLoading] = useState(0);
   const typeCount = {};
@@ -131,7 +133,7 @@ export default function Results({
           </h2>
           <p className="section-sub" id="result-sub">
             {isGlobal
-              ? <>在全部 <b>{(meta?.total || 0).toLocaleString('zh-CN')}</b> 位角色中找到 <b>{filtered.length}</b> 位</>
+              ? <>在全部 <b>{(meta?.total || 0).toLocaleString('zh-CN')}</b> 位角色中找到 <b>{filtered.length}</b> 位 · 点击跳转到 TA 的生日页面</>
               : totalOfDay
                 ? <>这一天共有 <b>{totalOfDay}</b> 位角色 · 悬停卡片让页面主色换成 TA 的颜色 · 快捷键 ← → 切换日期</>
                 : '这一天暂时没有收录到的角色'}
@@ -193,7 +195,7 @@ export default function Results({
               char={c}
               index={i}
               isFav={favIds.has(c.id)}
-              onOpen={onOpen}
+              onOpen={isGlobal ? (() => onOpenFromSearch?.(c)) : onOpen}
               onToggleFav={onToggleFav}
               onHover={onHover}
               priority={i < 6}

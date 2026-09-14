@@ -117,10 +117,37 @@ def norm_space(text: str | None) -> str:
     return re.sub(r"\s+", " ", (text or "")).strip()
 
 
+_TS_MAP: dict[str, str] | None = None
+
+
+def _ts_map() -> dict[str, str]:
+    """繁→简单字表（OpenCC TSCharacters，Apache-2.0）。只用于匹配，不改变展示文本。"""
+    global _TS_MAP
+    if _TS_MAP is not None:
+        return _TS_MAP
+    table: dict[str, str] = {}
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ts_characters.txt")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("#"):
+                    continue
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) == 2:
+                    table[parts[0]] = parts[1]
+    except OSError:
+        pass
+    _TS_MAP = table
+    return table
+
+
 def norm_name(text: str | None) -> str:
-    """归一化姓名用于跨站点匹配：小写、去空白与中点等标点。"""
+    """归一化姓名用于跨站/跨源匹配：繁→简、小写、去空白与中点等标点、去 ヶ/ヵ。"""
     if not text:
         return ""
+    table = _ts_map()
+    if table and any(ch in table for ch in text):
+        text = "".join(table.get(ch, ch) for ch in text)
     s = text.lower()
     s = re.sub(r"[\s·・.•\-–—_、,，.。/|()（）\[\]【】'\"`~!！?？:：;；]+", "", s)
     # ヶ/ヵ 在日文名里常被省略或替换（桐ヶ谷和人 ↔ 桐谷和人），匹配时统一去掉
@@ -135,3 +162,16 @@ def progress(done: int, total: int, extra: str = "") -> None:
     sys.stdout.flush()
     if done >= total:
         sys.stdout.write("\n")
+
+
+def bgm_cid(rec: dict) -> str:
+    """从 Bangumi 记录里取出纯数字角色 id（不要用 lstrip，它会按字符集剥离）。"""
+    for key in ("bgm_id", "source_id"):
+        v = str(rec.get(key) or "")
+        if v.startswith("bgm"):
+            v = v[3:]
+        if v.isdigit():
+            return v
+    url = str(rec.get("url") or "")
+    m = re.search(r"/character/(\d+)", url)
+    return m.group(1) if m else ""

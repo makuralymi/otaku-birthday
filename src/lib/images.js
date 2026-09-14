@@ -107,6 +107,7 @@ export function placeholderURI(char) {
  */
 export function mountImage(img, chain, { char, onRoute, priority = false } = {}) {
   if (!img) return null;
+  img.referrerPolicy = CONFIG.referrerPolicy;   // 占位图分支也要带上
   let index = 0;
   const apply = (c) => {
     if (c.cors) img.setAttribute('crossorigin', 'anonymous');

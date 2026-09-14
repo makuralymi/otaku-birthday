@@ -42,17 +42,22 @@ npm test             # jsdom 自测：54 项断言
 ```bash
 python3 scripts/fetch_anilist.py      # ① AniList：动画/漫画/轻小说角色（分页 + 热门作品 cast）
 python3 scripts/fetch_vndb.py         # ② VNDB：GalGame / 视觉小说角色
-python3 scripts/build_dataset.py      # ③ 合并去重 → public/data/months/*.csv + meta.json
-python3 scripts/enrich_bangumi.py     # ④ Bangumi：补中文名 / 中文简介 / 中文作品名（可中断续跑）
-python3 scripts/flag_nsfw.py          # ⑤ 可选：标记 R18 立绘（默认隐藏）
-python3 scripts/build_dataset.py      # ⑥ 合并中文与标记后重新生成
-python3 scripts/cache_images.py --limit 200   # ⑦ 可选：把热门立绘缓存到本地（离线可用）
+python3 scripts/fetch_bangumi_dump.py # ③ Bangumi 官方全量 dump：GalGame + 二次元手游/主机游戏角色
+python3 scripts/enrich_bangumi_ids.py # ④ 给上一步的角色补立绘与简介（按角色 id 直查，可中断续跑）
+python3 scripts/build_dataset.py      # ⑤ 合并去重 → public/data/days/*.csv + search-index.csv + meta.json
+python3 scripts/enrich_bangumi.py     # ⑥ Bangumi：补中文名 / 中文简介 / 中文作品名（可中断续跑）
+python3 scripts/flag_nsfw.py          # ⑦ 可选：标记 R18 立绘（默认隐藏）
+python3 scripts/build_dataset.py      # ⑧ 合并中文与标记后重新生成
+python3 scripts/cache_images.py --limit 200   # ⑨ 可选：把热门立绘缓存到本地（离线可用）
+python3 scripts/build_dataset.py --single     # 可选：额外出全量 characters.csv 与按月分片
 ```
 
 | 脚本 | 数据源 | 说明 |
 | --- | --- | --- |
 | `fetch_anilist.py` | [AniList](https://anilist.co) GraphQL | 按收藏数分页扫描（上限 5000 条），再抓热门作品 cast 补配角 |
 | `fetch_vndb.py` | [VNDB](https://vndb.org) kana API | 按 `birthday != null` 过滤，取角色与作品评分 |
+| `fetch_bangumi_dump.py` | [Bangumi Archive](https://github.com/bangumi/Archive) 官方全量 dump | 一次下载拿到 22 万角色、68 万条目、11 万游戏条目；只导入「有游戏登场 + 有生日」的角色，infobox 里直接带中文名与生日，GalGame 用标签/游戏类型区分 |
+| `enrich_bangumi_ids.py` | [Bangumi](https://bgm.tv) v0 API | 按角色 id 补立绘与简介（1 请求/角色，限速 1.05s，可中断续跑） |
 | `build_dataset.py` | 本地 | 跨源去重（同名 + 同生日）、分类、热度、色板预计算、写 CSV 与统计 |
 | `enrich_bangumi.py` | [Bangumi](https://bgm.tv) v0 API | 日文名检索 + 严格打分匹配，同作品只查一次，未命中的下次重试 |
 | `flag_nsfw.py` | VNDB | 按图片 sexual/violence 标记打 R18 标 |
@@ -64,16 +69,18 @@ python3 scripts/cache_images.py --limit 200   # ⑦ 可选：把热门立绘缓�
 
 | 指标 | 数值 |
 | --- | --- |
-| 收录角色 | **7,599** 位 |
-| 生日覆盖 | 366 / 366 天（含 2 月 29 日），中位数 18 位/天 |
-| 来源 | AniList 3,476 · VNDB 4,123（同名同生日已跨源合并） |
-| 类型 | Galgame 4,344 · 动画 3,384 · 漫画 2,679 · 轻小说 578 |
-| 数据体积 | 12 个月分片约 6.3 MB，全量单文件 6.6 MB |
-| 立绘 | 99.6% 有立绘 |
+| 收录角色 | **20,251** 位 |
+| 生日覆盖 | 366 / 366 天（含 2 月 29 日），中位数 48 位/天，最多的一天 214 位 |
+| 来源 | AniList 3,476 · VNDB 6,466 · Bangumi 10,309（跨源同名同生日已合并） |
+| 类型 | Galgame 12,107 · 动画 6,718 · **游戏 5,669** · 漫画 3,918 · 轻小说 578 |
+| 数据体积 | 366 个按天分片共 17.7 MB（单日最大 201 KB）+ 搜索索引 5.0 MB |
+| 立绘 | 约一半有立绘（Bangumi 侧由 `enrich_bangumi_ids.py` 逐批补，其余走纯色占位卡） |
 
 ### 数据格式
 
-`public/data/months/01.csv … 12.csv`（UTF-8 带表头；`public/data/characters.csv` 是全量合并版）：
+`public/data/days/0101.csv … 1231.csv`（按天分片，一次查询只加载当天那几十 KB）；
+`public/data/search-index.csv` 是瘦身索引（无简介/作品明细），用于跨月搜索与分片兜底；
+需要单文件全量时执行 `python3 scripts/build_dataset.py --single` 生成 `characters.csv` 与按月分片。
 
 | 列 | 含义 |
 | --- | --- |
@@ -91,6 +98,20 @@ python3 scripts/cache_images.py --limit 200   # ⑦ 可选：把热门立绘缓�
 | `palette` | 构建期预计算色板（给不允许跨域取色的图源兜底） |
 | `url_al` / `url_bgm` / `url_vndb` / `bgm_id` | 原始条目链接 |
 
+## 数据是怎么去重的
+
+跨源（AniList / VNDB / Bangumi）与源内都会去重，判据是**「同名 + 同生日」**：
+
+1. **名字取并集**：日文原名 / 罗马音 / 中文名任一写法相同即命中（修掉了「只比第一个字段」的漏合并）
+2. **书写归一**：繁→简单字表（Vendored [OpenCC `TSCharacters`](https://github.com/BYVoid/OpenCC)，Apache-2.0，见 `scripts/data/ts_characters.txt`）、
+   小写化、去中点/空格/标点、`ヶ/ヵ` 省略差异（桐ヶ谷和人 ↔ 桐谷和人）
+3. **合并而非丢弃**：两边的作品、类型、立绘、别名、热度取并集，中文简介优先
+4. **两轮执行**：第一轮在载入原始数据后，第二轮在 Bangumi 中文补全之后（AniList/VNDB 记录的中文名往往这时才填上，
+   而「中文名相同 + 同生日」正是跨源重复最明显的信号）
+5. Bangumi dump 内部同样先按「主名 / 中文名 / 日文名」去重（别名不参与 key，避免「爱丽丝」「レイ」这类重名误合并）
+
+当前全库自检：**同名 + 同生日的残留重复 = 0 对 / 20,251 条**。
+
 ## 立绘是怎么调取的（多线路兜底）
 
 按顺序尝试，任一条成功即停：
@@ -107,7 +128,7 @@ python3 scripts/cache_images.py --limit 200   # ⑦ 可选：把热门立绘缓�
 前端每次换线路都会重新判断「这张图能不能读画布」：能读就实时取色，不能读就用 CSV 里的预计算色板。
 所有线路都写在 `src/lib/config.js` 里，**把 `proxies` 置为空数组即可完全关闭第三方线路**。
 
-数据文件同样有兜底：`meta.json` 挂了就用全量 CSV 现算统计；某个月的分片 404 就退回全量 CSV 再筛。
+数据文件同样有兜底：`meta.json` 挂了就用搜索索引现算统计；某天的分片 404 就退回搜索索引渲染（少简介与作品明细，卡片照常显示）。
 
 ## 项目结构
 

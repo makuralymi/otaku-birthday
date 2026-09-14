@@ -17,9 +17,10 @@ import os
 import re
 import sys
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
-from common import DATA, RAW, ROOT, log, norm_name, norm_space, read_jsonl
+from common import DATA, RAW, ROOT, bgm_cid, log, norm_name, norm_space, read_jsonl
 
 CORS_OK_DOMAINS = ("anilist.co", "bgm.tv")  # 这些图源允许 canvas 跨域取色，前端可实时取色
 
@@ -34,11 +35,17 @@ ANILIST_FORMAT_CAT = {
     "VIDEO_GAME": CAT_GAME,
 }
 
-MAX_VNDB_RECORDS = int(os.environ.get("BUILD_MAX_VNDB", "4500"))
-VNDB_MIN_VOTES = int(os.environ.get("BUILD_VNDB_MIN_VOTES", "25"))
+MAX_VNDB_RECORDS = int(os.environ.get("BUILD_MAX_VNDB", "7000"))
+VNDB_MIN_VOTES = int(os.environ.get("BUILD_VNDB_MIN_VOTES", "10"))
 MAX_WORKS = 6
 SUMMARY_LIMIT = 240
 PALETTE_LIMIT = int(os.environ.get("BUILD_PALETTE_LIMIT", "1200"))
+
+INDEX_COLUMNS = [
+    "id", "src", "month", "day", "name_cn", "name_native", "name_romaji", "alt_names",
+    "types", "ptype", "work", "work_cn", "work_year", "heat", "fav", "votes", "collects",
+    "nsfw", "thumb", "image", "alts", "palette", "bgm_id", "url_al", "url_bgm", "url_vndb",
+]
 
 COLUMNS = [
     "id", "src", "month", "day", "year",
@@ -162,6 +169,69 @@ def from_anilist(raw: dict) -> dict:
     }
 
 
+def from_bangumi_dump(raw: dict) -> dict:
+    """Bangumi 官方 dump 导入的游戏角色（GalGame / 二次元游戏为主）。"""
+    works = []
+    for w in raw.get("works") or []:
+        ty = w.get("type") or CAT_GAME
+        if w.get("is_gal"):
+            ty = CAT_VN
+        works.append({
+            "tid": w.get("id"),
+            "t": w.get("title") or "",
+            "tr": "",
+            "cn": w.get("title_cn") or "",
+            "ty": ty,
+            "y": w.get("year"),
+            "pop": 0,
+            "rank": w.get("rank") or 0,
+            "staff": w.get("staff") or "",
+            "src": "bgm",
+        })
+    works.sort(key=lambda w: (w["ty"] != CAT_VN, w.get("rank") or 999999))
+    types = []
+    if any(w["ty"] == CAT_VN for w in works):
+        types.append(CAT_VN)
+    if any(w["ty"] == CAT_GAME for w in works):
+        types.append(CAT_GAME)
+    for t in (CAT_ANIME, CAT_MANGA, CAT_NOVEL):
+        if any(w["ty"] == t for w in works):
+            types.append(t)
+    first_ty = types[0] if types else CAT_GAME
+    return {
+        "src": "bangumi",
+        "sid": raw["source_id"],
+        "ids": [f"bgm-{raw['source_id']}"],
+        "month": int(raw["month"]),
+        "day": int(raw["day"]),
+        "year": raw.get("year"),
+        "name_native": raw.get("name_native") or "",
+        "name_romaji": raw.get("name_romaji") or "",
+        "name_cn": raw.get("name_cn") or "",
+        "alt_names": [a for a in (raw.get("alt_names") or []) if a][:6],
+        "gender": norm_gender(raw.get("gender") or ""),
+        "blood": (raw.get("blood_type") or "").upper()[:4],
+        "age": "",
+        "summary": short_summary(raw.get("summary") or ""),
+        "summary_lang": "zh",
+        "image": "",
+        "thumb": "",
+        "alt_images": [],
+        "works": works[:MAX_WORKS],
+        "fav": 0,
+        "votes": 0,
+        "collects": int(raw.get("collects") or 0),
+        "nsfw": bool(raw.get("nsfw")),
+        "tags": [],
+        "url_al": "",
+        "url_vndb": "",
+        "url_bgm": raw.get("url") or "",
+        "bgm_id": bgm_cid(raw),
+        "types": types or [CAT_GAME],
+        "ptype": first_ty,
+    }
+
+
 def from_vndb(raw: dict) -> dict:
     works = []
     for w in raw.get("works") or []:
@@ -216,12 +286,14 @@ def from_vndb(raw: dict) -> dict:
 # ─────────────────────────── 合并 ───────────────────────────
 
 
-def merge_key(rec: dict) -> str:
-    for key in ("name_native", "name_romaji"):
-        n = norm_name(rec.get(key))
-        if n and len(n) >= 2:
-            return n
-    return ""
+def merge_keys(rec: dict) -> list[str]:
+    """一条记录可能有多个可用名字（日文原名 / 罗马音 / 中文名），任意一个对上就算同一角色。"""
+    keys = []
+    for field in ("name_native", "name_romaji", "name_cn"):
+        n = norm_name(rec.get(field))
+        if n and len(n) >= 2 and n not in keys:
+            keys.append(n)
+    return keys
 
 
 def merge_into(base: dict, other: dict) -> dict:
@@ -265,16 +337,23 @@ def merge_into(base: dict, other: dict) -> dict:
 
 
 def dedupe(records: list[dict]) -> tuple[list[dict], int]:
-    merged: dict[tuple[str, int, int], dict] = {}
+    """同名 + 同生日判为同一角色；名字的任一写法（原名/罗马音/中文名）命中即合并。"""
+    index: dict[tuple[str, int, int], dict] = {}
     out: list[dict] = []
     for rec in records:
-        key = merge_key(rec)
-        mkey = (key, rec["month"], rec["day"])
-        if key and mkey in merged:
-            merged[mkey] = merge_into(merged[mkey], rec)
+        keys = merge_keys(rec)
+        hit = None
+        for k in keys:
+            hit = index.get((k, rec["month"], rec["day"]))
+            if hit is not None:
+                break
+        if hit is not None:
+            merged = merge_into(hit, rec)
+            for k in keys:                      # 新出现的写法也指向合并后的记录
+                index[(k, rec["month"], rec["day"])] = merged
             continue
-        if key:
-            merged[mkey] = rec
+        for k in keys:
+            index[(k, rec["month"], rec["day"])] = rec
         out.append(rec)
     return out, len(records) - len(out)
 
@@ -522,9 +601,11 @@ def to_row(rec: dict, palette: dict[str, list[str]]) -> dict:
     }
 
 
-def main() -> None:
+def main(single: bool = False) -> None:
     t0 = time.time()
     anilist = [from_anilist(r) for r in read_jsonl(os.path.join(RAW, "anilist.jsonl"))]
+    bangumi_rows = [from_bangumi_dump(r) for r in read_jsonl(os.path.join(RAW, "bangumi_dump.jsonl"))]
+    log(f"读取原始数据：Bangumi dump {len(bangumi_rows)} 条（游戏角色）")
     vndb_all = [from_vndb(r) for r in read_jsonl(os.path.join(RAW, "vndb.jsonl"))]
     log(f"读取原始数据：AniList {len(anilist)} 条，VNDB {len(vndb_all)} 条")
 
@@ -534,6 +615,28 @@ def main() -> None:
         log(f"VNDB 超过上限，按人气保留前 {MAX_VNDB_RECORDS} 条（阈值调整见 BUILD_MAX_VNDB）")
         vndb = vndb[:MAX_VNDB_RECORDS]
     log(f"VNDB 过滤后保留 {len(vndb)} 条（最佳 VN 投票数 ≥ {VNDB_MIN_VOTES}）")
+
+    # 合并按 id 补来的 Bangumi 立绘 / 简介（scripts/enrich_bangumi_ids.py 生成）
+    images_path = os.path.join(RAW, "bangumi_images.jsonl")
+    if os.path.exists(images_path):
+        by_id = {bgm_cid(r): r for r in read_jsonl(images_path) if bgm_cid(r)}
+        hit = 0
+        for rec in bangumi_rows:
+            info = by_id.get(bgm_cid(rec))
+            if not info:
+                continue
+            if info.get("image"):
+                rec["image"] = info["image"]
+                rec["thumb"] = info.get("image_medium") or info["image"]
+                hit += 1
+            if info.get("summary") and len(info["summary"]) > len(rec.get("summary") or ""):
+                rec["summary"] = short_summary(info["summary"])
+                rec["summary_lang"] = "zh"
+            if info.get("collects"):
+                rec["collects"] = max(rec.get("collects") or 0, int(info["collects"]))
+            if info.get("nsfw"):
+                rec["nsfw"] = True
+        log(f"Bangumi 立绘补全：{hit} 个角色")
 
     # 合并 R18 标记（scripts/flag_nsfw.py 生成）
     nsfw_path = os.path.join(RAW, "vndb_nsfw.json")
@@ -547,7 +650,7 @@ def main() -> None:
                 hit += 1
         log(f"R18 标记：{hit} 个 VNDB 角色默认隐藏")
 
-    records = anilist + vndb
+    records = anilist + vndb + bangumi_rows
     records, dup = dedupe(records)
     log(f"跨源去重合并 {dup} 条，剩余 {len(records)} 条")
 
@@ -619,36 +722,71 @@ def main() -> None:
                     break
     log(f"作品中文名回填：{work_hits} 部作品")
 
+    # 补全之后再跑一轮去重：AniList/VNDB 记录的中文名往往是这一步才填上的，
+    # 此时「中文名相同 + 同生日」的跨源重复才暴露出来
+    records, dup2 = dedupe(records)
+    if dup2:
+        log(f"补全后二次去重：又合并 {dup2} 条")
+
     # 补全之后重新 finalize：中文名、作品名、备用图源线路都可能变了
     records = [finalize(r) for r in records]
     records.sort(key=lambda r: (-r["heat"], r["month"], r["day"], r["name_romaji"]))
 
     palette = palette_pass(records)
 
-    # 写按月分片 CSV
-    months_dir = os.path.join(DATA, "months")
-    os.makedirs(months_dir, exist_ok=True)
-    buckets: dict[int, list[dict]] = {m: [] for m in range(1, 13)}
+    # 写按天分片 CSV：站点一次只查一天，几十 KB 就能搞定，数据量再大也不影响首屏
+    days_dir = os.path.join(DATA, "days")
+    os.makedirs(days_dir, exist_ok=True)
+    for old in os.listdir(days_dir):
+        if old.endswith(".csv"):
+            os.remove(os.path.join(days_dir, old))
+    buckets: dict[tuple[int, int], list[dict]] = defaultdict(list)
     for rec in records:
-        buckets[rec["month"]].append(rec)
-    for month, items in buckets.items():
-        items.sort(key=lambda r: (r["day"], -r["heat"]))
-        path = os.path.join(months_dir, f"{month:02d}.csv")
+        buckets[(rec["month"], rec["day"])].append(rec)
+    day_rows = 0
+    day_bytes = 0
+    for (m, d), items in sorted(buckets.items()):
+        items.sort(key=lambda r: -r["heat"])
+        path = os.path.join(days_dir, f"{m:02d}{d:02d}.csv")
         with open(path, "w", encoding="utf-8", newline="") as fh:
             writer = csv.DictWriter(fh, fieldnames=COLUMNS)
             writer.writeheader()
             for rec in items:
                 writer.writerow(to_row(rec, palette))
-        log(f"  data/months/{month:02d}.csv  {len(items):5d} 行  {os.path.getsize(path)/1024:7.1f} KB")
+        day_rows += len(items)
+        day_bytes += os.path.getsize(path)
+    log(f"  data/days/MMDD.csv  {len(buckets)} 个文件  {day_rows} 行  {day_bytes/1024/1024:.1f} MB"
+        f"（最大 {max(os.path.getsize(os.path.join(days_dir, f)) for f in os.listdir(days_dir))/1024:.0f} KB）")
 
-    # 全量单文件 CSV
-    all_path = os.path.join(DATA, "characters.csv")
-    with open(all_path, "w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=COLUMNS)
+    # 搜索索引：瘦身版（无简介 / 无作品明细），跨月搜索与分片兜底都用它
+    index_path = os.path.join(DATA, "search-index.csv")
+    with open(index_path, "w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=INDEX_COLUMNS)
         writer.writeheader()
         for rec in records:
-            writer.writerow(to_row(rec, palette))
-    log(f"  data/characters.csv  {len(records)} 行  {os.path.getsize(all_path)/1024/1024:.1f} MB")
+            row = to_row(rec, palette)
+            writer.writerow({k: row.get(k, "") for k in INDEX_COLUMNS})
+    log(f"  data/search-index.csv  {len(records)} 行  {os.path.getsize(index_path)/1024/1024:.1f} MB")
+
+    if single:
+        months_dir = os.path.join(DATA, "months")
+        os.makedirs(months_dir, exist_ok=True)
+        for month in range(1, 13):
+            items = [r for r in records if r["month"] == month]
+            path = os.path.join(months_dir, f"{month:02d}.csv")
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                writer = csv.DictWriter(fh, fieldnames=COLUMNS)
+                writer.writeheader()
+                for rec in sorted(items, key=lambda r: (r["day"], -r["heat"])):
+                    writer.writerow(to_row(rec, palette))
+        all_path = os.path.join(DATA, "characters.csv")
+        with open(all_path, "w", encoding="utf-8", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=COLUMNS)
+            writer.writeheader()
+            for rec in records:
+                writer.writerow(to_row(rec, palette))
+        log(f"  data/characters.csv  {len(records)} 行  {os.path.getsize(all_path)/1024/1024:.1f} MB"
+            f" + data/months/*.csv（--single 附加产物）")
 
     # meta.json
     days = [[0] * 32 for _ in range(13)]
@@ -716,6 +854,9 @@ def main() -> None:
     with open(os.path.join(RAW, "bangumi_queue.json"), "w", encoding="utf-8") as fh:
         json.dump(queue, fh, ensure_ascii=False)
     log(f"  待中文补全队列：{len(queue)} 条 → raw/bangumi_queue.json")
+    log(f"  来源分布：anilist={sum(1 for r in records if r['src']=='anilist')} "
+        f"vndb={sum(1 for r in records if r['src']=='vndb')} "
+        f"bangumi={sum(1 for r in records if r['src']=='bangumi')}")
 
     log(f"完成，共 {len(records)} 个角色，用时 {time.time()-t0:.1f}s")
     log("来源分布：" + ", ".join(f"{k}={v}" for k, v in src_counts.items()))
@@ -726,4 +867,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(single="--single" in sys.argv))
