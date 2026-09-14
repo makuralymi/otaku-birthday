@@ -17,6 +17,8 @@ import Results from './components/Results.jsx';
 import Calendar from './components/Calendar.jsx';
 import { DetailDrawer, FavoritesDrawer } from './components/Drawers.jsx';
 import { TopBar, About, Footer, Toast } from './components/Layout.jsx';
+import Intro from './components/Intro.jsx';
+import { enableSmoothScroll } from './lib/smoothScroll.js';
 
 const FAV_KEY = 'spj:favorites:v1';
 
@@ -60,6 +62,9 @@ export default function App() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 2200);
   }, []);
+
+  /* ── 全局平滑（无级）滚动 ──────────────────────────── */
+  useEffect(() => enableSmoothScroll(), []);
 
   /* ── 收藏 ─────────────────────────────────────────── */
   useEffect(() => {
@@ -334,6 +339,9 @@ export default function App() {
 
   return (
     <>
+      {/* 开屏动画：居中日期 + 标题 → 停留 1 秒 → 上移归位 → 其余内容渐显 */}
+      <Intro month={month} day={day} />
+
       <TopBar favCount={favs.length} onOpenFav={() => setFavOpen(true)} />
 
       {/* 页面主色带：当前角色的五个纯色方块 */}

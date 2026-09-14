@@ -17,6 +17,7 @@ export function CharacterCard({ char, index, isFav, onOpen, onToggleFav, onHover
   const imgRef = useRef(null);
   const [palette, setPalette] = useState(() => quickPalette(char));
   const [revealed, setRevealed] = useState(false);
+  const [shown, setShown] = useState(false);        // 滚动到视口后浮出
 
   // 只在进入视口后干活（80 张卡也不会一起触发取色）
   useEffect(() => {
@@ -25,6 +26,17 @@ export function CharacterCard({ char, index, isFav, onOpen, onToggleFav, onHover
     const io = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) { setRevealed(true); io.disconnect(); }
     }, { rootMargin: '240px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // 滚动浮出：进入视口（略晚于边缘）时加 .is-in
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver !== 'function') { setShown(true); return undefined; }
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setShown(true); io.disconnect(); }
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -62,8 +74,8 @@ export function CharacterCard({ char, index, isFav, onOpen, onToggleFav, onHover
   return (
     <article
       ref={cardRef}
-      className="card"
-      style={cardVars(palette)}
+      className={`card${shown ? ' is-in' : ''}`}
+      style={{ ...cardVars(palette), '--reveal-delay': `${Math.min(index % 12, 9) * 40}ms` }}
       role="button"
       tabIndex={0}
       data-id={char.id}

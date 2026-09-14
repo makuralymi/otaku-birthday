@@ -92,6 +92,17 @@ const check = (name, cond, extra = '') => results.push([cond ? 'PASS' : 'FAIL', 
 await until(() => $('#stat-total') && $('#stat-total').textContent !== '—');
 await until(() => $$('.card').length > 0);
 
+/* ── 0. 开屏动画 ───────────────────────────────────── */
+check('开屏动画已出现', !!$('#intro'), $('#intro')?.className || '无');
+const introText = $('#intro')?.textContent || '';
+check('开屏内容含日期与标题', /\d+ 月 \d+ 日/.test(introText) && introText.includes('你的生日里，住着哪些角色？'),
+  introText.trim().slice(0, 40));
+check('开屏期间主内容未就绪', !window.document.body.classList.contains('page-ready'));
+await until(() => !$('#intro'), 8000);
+check('开屏动画结束后自动移除', !$('#intro'));
+check('主页面进入就绪态（内容渐显）', window.document.body.classList.contains('page-ready'));
+check('卡片已加浮出类', $$('.card.is-in').length > 0, `${$$('.card.is-in').length} 张`);
+
 /* ── 1. 首屏与数据 ─────────────────────────────────── */
 check('meta 统计渲染', $('#stat-total')?.textContent !== '—' && /^\d/.test($('#stat-total')?.textContent || ''), $('#stat-total')?.textContent);
 check('月份下拉 12 项', $$('#sel-month option').length === 12, `${$$('#sel-month option').length}`);

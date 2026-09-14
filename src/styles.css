@@ -481,3 +481,97 @@ section.results, section.calendar-section, section.about {
   gap: 12px; margin-bottom: 8px; max-width: 720px;
 }
 .gallery-head .fine { color: var(--ink-3); }
+
+
+/* ============================================================
+   开屏动画：居中「日期 + 站点标题」浮出 → 停留 1s → 上移归位 → 内容渐显
+   全程只用 opacity / transform，纯色，无渐变
+   ============================================================ */
+body.intro-lock { overflow: hidden; }
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+}
+.intro-box { width: min(880px, 88vw); text-align: center; }
+.intro-item {
+  transform: translate3d(0, 26px, 0) scale(1);
+  opacity: 0;
+  transition: opacity .6s var(--ease), transform var(--intro-ms, 620ms) cubic-bezier(.22,.75,.2,1);
+  will-change: transform, opacity;
+}
+.intro-rise .intro-item { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+.intro-hold .intro-item { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+.intro-move.intro-go .intro-item {
+  opacity: 0.999;
+  transform: translate3d(var(--intro-dx, 0), var(--intro-dy, 0), 0) scale(var(--intro-scale, 1));
+}
+.intro-date {
+  margin: 0 0 18px;
+  font-family: var(--font-sans);
+  font-size: clamp(13px, 1.5vw, 16px);
+  letter-spacing: .28em;
+  color: var(--ink-3);
+}
+.intro-title {
+  margin: 0;
+  font-size: clamp(26px, 5vw, 58px);
+  line-height: 1.22;
+  color: var(--ink);
+}
+.intro-bar {
+  display: block;
+  width: 46px; height: 4px;
+  margin: 22px auto 0;
+  background: var(--m-accent);
+  transition: opacity .4s var(--ease);
+}
+.intro-move .intro-bar { opacity: 0; }
+
+/* 未就绪前，主页面内容先隐藏，等开屏归位后按顺序渐显 */
+body.intro-pending:not(.page-ready) .topbar,
+body.intro-pending:not(.page-ready) .colorband,
+body.intro-pending:not(.page-ready) .hero-title,
+body.intro-pending:not(.page-ready) .hero-lede,
+body.intro-pending:not(.page-ready) .picker,
+body.intro-pending:not(.page-ready) .gallery-block,
+body.intro-pending:not(.page-ready) section.results,
+body.intro-pending:not(.page-ready) section.calendar-section,
+body.intro-pending:not(.page-ready) section.about {
+  opacity: 0;
+  transform: translateY(16px);
+}
+body.page-ready .hero-title { transition: opacity .45s var(--ease); }
+body.page-ready .hero-lede { transition: opacity .5s var(--ease) .12s, transform .5s var(--ease) .12s; }
+body.page-ready .picker { transition: opacity .55s var(--ease) .2s, transform .55s var(--ease) .2s; }
+body.page-ready .gallery-block { transition: opacity .55s var(--ease) .3s, transform .55s var(--ease) .3s; }
+body.page-ready .colorband { transition: opacity .5s var(--ease) .34s; }
+body.page-ready .topbar { transition: opacity .5s var(--ease) .34s, background-color .5s var(--ease); }
+body.page-ready section.results,
+body.page-ready section.calendar-section,
+body.page-ready section.about { transition: opacity .7s var(--ease) .42s, transform .7s var(--ease) .42s; }
+body.page-ready .topbar,
+body.page-ready .colorband,
+body.page-ready .hero-title,
+body.page-ready .hero-lede,
+body.page-ready .picker,
+body.page-ready .gallery-block,
+body.page-ready section.results,
+body.page-ready section.calendar-section,
+body.page-ready section.about {
+  opacity: 1;
+  transform: translateY(0);
+}
+body.page-ready .gallery-item { animation: rise .5s var(--ease) backwards; }
+body.page-ready .gallery-item:nth-child(3n+1) { animation-delay: .32s; }
+body.page-ready .gallery-item:nth-child(3n+2) { animation-delay: .38s; }
+body.page-ready .gallery-item:nth-child(3n) { animation-delay: .44s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .intro { display: none; }
+  .card { opacity: 1; transform: none; }
+}
