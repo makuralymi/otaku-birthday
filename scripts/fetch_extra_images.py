@@ -310,12 +310,26 @@ def vndb_one(char: dict) -> dict | None:
 # ─────────────────────────── 主流程 ───────────────────────────
 
 
-def load_missing(limit: int, only_types: set[str] | None = None) -> list[dict]:
+CN_OK = ("bgm.tv", "moegirl.org.cn", "biligame.com")
+
+
+def _is_cn(url: str) -> bool:
+    """该图片地址在大陆是否可直连"""
+    return bool(url) and any(d in url for d in CN_OK)
+
+
+def load_missing(limit: int, only_types: set[str] | None = None, cn_only: bool = False) -> list[dict]:
     rows: list[dict] = []
     for path in sorted(glob.glob(os.path.join(DATA, "days", "*.csv"))):
         with open(path, encoding="utf-8") as fh:
             for r in csv.DictReader(fh):
-                if r["image"]:
+                if cn_only:
+                    # 已有大陆可直连的图（主图或备用都算）就跳过
+                    if _is_cn(r["image"] or r["thumb"]):
+                        continue
+                    if any(_is_cn(a) for a in (r["alts"] or "").split("|") if a):
+                        continue
+                elif r["image"]:
                     continue
                 if only_types and not (set(r["types"].split("|")) & only_types):
                     continue
@@ -338,6 +352,8 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=6, help="并发线程数（每站点独立限速）")
     ap.add_argument("--rps", type=float, default=3.0, help="每站点请求速率上限")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--cn-targets", action="store_true",
+                    help="只处理「主图在大陆打不开且没有大陆备用图」的条目（配合 --sources moegirl 用）")
     args = ap.parse_args()
     sources = [s.strip() for s in args.sources.split(",") if s.strip()]
 
@@ -346,7 +362,8 @@ def main() -> int:
     done = {r["id"] for r in cached if r.get("image")}
     done |= {r["id"] for r in cached if r.get("miss") and (r.get("tries") or 1) >= 2}
     tried = {r["id"]: (r.get("tries") or 1) for r in cached if r.get("miss")}
-    todo = [c for c in load_missing(args.limit + len(done)) if c["id"] not in done][: args.limit]
+    todo = [c for c in load_missing(args.limit + len(done), cn_only=args.cn_targets)
+            if c["id"] not in done][: args.limit]
     log(f"多源补图：缺图候选 {len(todo)} 个（已解决 {len(done)}），来源 {'/'.join(sources)}"
         f"，并发 {args.workers} 线程 / 每站点限速 {args.rps} req/s")
     if not todo:

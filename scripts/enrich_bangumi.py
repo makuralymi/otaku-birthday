@@ -25,7 +25,7 @@ OUT = os.path.join(RAW, "bangumi.jsonl")
 QUEUE = os.path.join(RAW, "bangumi_queue.json")
 
 LIMIT = int(os.environ.get("BANGUMI_LIMIT", "1000"))
-SLEEP = float(os.environ.get("BANGUMI_SLEEP", "1.05"))
+SLEEP = float(os.environ.get("BANGUMI_SLEEP", "1.05"))  # 并发模式下设 BANGUMI_SLEEP=0，改由令牌桶限速
 MIN_SCORE = float(os.environ.get("BANGUMI_MIN_SCORE", "3.0"))
 
 CN_KEYS = ("简体中文名", "中文名", "簡體中文名")
@@ -208,7 +208,99 @@ def enrich_one(item: dict, work_cache: dict[str, str] | None = None) -> dict:
     return out
 
 
+CN_OK = ("bgm.tv", "moegirl.org.cn", "biligame.com")
+
+
+def _is_cn(url: str) -> bool:
+    return bool(url) and any(d in url for d in CN_OK)
+
+
+def load_cn_image_targets(limit: int) -> list[dict]:
+    """挑出「主图在大陆打不开、且没有大陆备用图」的条目（按人气降序）。
+
+    补到 Bangumi 的图（lain.bgm.tv，国内可直连）后，构建期的「大陆优先」排序
+    会自动把它提为主图；这也是目前大陆网络下最稳的图源。
+    """
+    import csv
+    import glob
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out: list[dict] = []
+    for path in sorted(glob.glob(os.path.join(root, "public", "data", "days", "*.csv"))):
+        with open(path, encoding="utf-8") as fh:
+            for r in csv.DictReader(fh):
+                if _is_cn(r["image"] or r["thumb"]):
+                    continue
+                if any(_is_cn(a) for a in (r["alts"] or "").split("|") if a):
+                    continue
+                key = r["name_native"] or r["name_romaji"] or r["name_cn"]
+                if not key:
+                    continue
+                out.append({
+                    "id": r["id"], "key": key, "romaji": r["name_romaji"],
+                    "month": int(r["month"]), "day": int(r["day"]), "src": r["src"],
+                    "heat": int(r["heat"] or 0),
+                    "works": [w for w in (r["work"], r["work_cn"]) if w],
+                })
+    out.sort(key=lambda x: -x["heat"])
+    return out[:limit]
+
+
+def _run_cn_images(targets: list[dict], workers: int, rps: float) -> int:
+    """并发给「缺大陆可直连图源」的条目补 Bangumi 图（lain.bgm.tv 国内可直连）。"""
+    import threading
+
+    from parallel import RateLimiter, parallel_map
+
+    done = {norm_name(r.get("key")) for r in read_jsonl(OUT) if r.get("matched")}
+    todo = [t for t in targets if norm_name(t.get("key")) not in done]
+    log(f"  CN 图源：队列 {len(targets)}，已命中 {len(done)}，本次处理 {len(todo)}")
+    if not todo:
+        return 0
+    work_cache = build_work_cache()
+    limiter = RateLimiter(rps=rps)
+    lock = threading.Lock()
+    stat = {"hit": 0, "img": 0}
+
+    def work(item: dict):
+        limiter.acquire()
+        rec = enrich_one(item, work_cache)
+        if rec.get("matched"):
+            with lock:
+                append_jsonl(OUT, rec)
+                stat["hit"] += 1
+                if rec.get("image"):
+                    stat["img"] += 1
+        return rec
+
+    parallel_map(todo, work, workers=workers, limiter=limiter, progress_every=25,
+                 on_progress=lambda d, t, ok: log(f"    进度 {d}/{t}  命中 {stat['hit']}（含图 {stat['img']}）"))
+    log(f"  CN 图源完成：命中 {stat['hit']}，其中拿到图 {stat['img']} → {OUT}")
+    return 0
+
+
 def main() -> None:
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=int(os.environ.get("BANGUMI_LIMIT", "1000")))
+    ap.add_argument("--workers", type=int, default=int(os.environ.get("BANGUMI_WORKERS", "5")))
+    ap.add_argument("--rps", type=float, default=float(os.environ.get("BANGUMI_RPS", "4")))
+    ap.add_argument("--cn-images", action="store_true",
+                    help="只补「主图在大陆打不开」的条目（补的是图片，不是中文名）")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    if args.cn_images:
+        targets = load_cn_image_targets(max(args.limit * 3, args.limit))
+        log(f"CN 图源补全：候选 {len(targets)} 个缺大陆图的条目"
+            f"（并发 {args.workers} 线程 / {args.rps} req/s）")
+        if args.dry_run:
+            for t in targets[:8]:
+                log(f"   {t['key']}  {t['month']}/{t['day']}  heat={t['heat']}")
+            return 0
+        return _run_cn_images(targets[: args.limit], args.workers, args.rps)
+
     if not os.path.exists(QUEUE):
         log(f"缺少 {QUEUE}，请先执行 build_dataset.py")
         return 1

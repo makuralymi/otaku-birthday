@@ -409,7 +409,10 @@ def finalize(rec: dict) -> dict:
     rec["work_year"] = primary.get("y") if primary else None
     rec["work_fmt"] = (primary.get("ty") if primary else "")
     rec["heat"] = heat_of(rec)
-    # 备用图源线路：只保留「跨站」候选（同站不同尺寸不算线路，前端会自己拼镜像与代理）
+    # ── 图片线路排序：**大陆网络可直连的图源优先** ─────────────────
+    # 经验值：lain.bgm.tv / storage.moegirl.org.cn / patchwiki.biligame.com 国内可直连；
+    # s4.anilist.co / t.vndb.org / static.wikia.nocookie.net 在国内经常打不开或很慢。
+    # 主图优先取可直连的，其余按同一优先级排进 alts（前端仍会依次降级）。
     from urllib.parse import urlsplit
 
     def _host(url: str) -> str:
@@ -418,18 +421,46 @@ def finalize(rec: dict) -> dict:
         except ValueError:
             return ""
 
-    rec["alts"] = []
-    primary_host = _host(rec.get("image") or rec.get("thumb") or "")
-    if primary_host:
-        seen = {primary_host}
-        for url in [rec.get("thumb"), rec.get("image")] + list(rec.get("alt_images") or []):
-            if not url or not url.startswith("http"):
-                continue
-            host = _host(url)
-            if not host or host in seen:
-                continue
-            seen.add(host)
-            rec["alts"].append(url)
+    def _group(url: str) -> str:
+        h = _host(url)
+        if not h:
+            return "none"
+        if "bgm.tv" in h:
+            return "bangumi"
+        if "moegirl.org.cn" in h:
+            return "moegirl"
+        if "biligame.com" in h:
+            return "bwiki"
+        if "anilist.co" in h:
+            return "anilist"
+        if "vndb.org" in h:
+            return "vndb"
+        if "nocookie.net" in h:
+            return "fandom"
+        if "wp.com" in h or "wsrv.nl" in h:
+            return "proxy"
+        return "other"
+
+    CN_FIRST = os.environ.get("CN_FIRST", "1") != "0"
+    # 大陆可直连优先级（数字越小越优先）
+    ORDER_CN = {"bangumi": 0, "moegirl": 1, "bwiki": 2, "other": 3, "proxy": 6, "anilist": 7, "vndb": 8, "fandom": 9, "none": 9}
+    ORDER_DEFAULT = {"anilist": 0, "bangumi": 1, "vndb": 2, "moegirl": 3, "bwiki": 4, "fandom": 5, "other": 6, "proxy": 7, "none": 9}
+    _rank = ORDER_CN if CN_FIRST else ORDER_DEFAULT
+
+    candidates: list[str] = []
+    for url in [rec.get("thumb"), rec.get("image")] + list(rec.get("alt_images") or []):
+        if url and url.startswith("http") and url not in candidates:
+            candidates.append(url)
+    candidates.sort(key=lambda u: _rank.get(_group(u), 5))     # 稳定排序：同组内保持原有顺序
+
+    if candidates:
+        rec["thumb"] = candidates[0]
+        first_host = _host(candidates[0])
+        big = next((u for u in candidates[1:] if _host(u) == first_host), None)
+        rec["image"] = big or candidates[0]                    # 大图优先取同图源的另一尺寸
+        rec["alts"] = [u for u in candidates if u not in (rec["thumb"], rec["image"])][:6]
+    else:
+        rec["alts"] = []
     rec["types"] = [t for t in [CAT_ANIME, CAT_MANGA, CAT_NOVEL, CAT_GAME, CAT_VN, CAT_OTHER] if t in rec["types"]]
     rec["id"] = rec["ids"][0]
     return rec
