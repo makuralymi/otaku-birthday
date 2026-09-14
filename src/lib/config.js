@@ -25,8 +25,12 @@ export const CONFIG = {
   localManifest: 'data/local_images.json',
   preferLocal: true,
 
-  /* 多数 CDN 反而更喜欢不带 referer 的图片请求 */
+  /* 多数 CDN 更喜欢不带 referer 的图片请求；Fandom 的 static.wikia.nocookie.net
+     反过来要求带 Referer（不带会 403），所以按域名分流 */
   referrerPolicy: 'no-referrer',
+  referrerOverrides: {
+    'nocookie.net': 'origin-when-cross-origin',
+  },
 
   /* 数据文件的多线路（按顺序降级）
      主线路是「按天分片」：一次查询只加载当天几十 KB；

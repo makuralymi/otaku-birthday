@@ -638,6 +638,30 @@ def main(single: bool = False) -> None:
                 rec["nsfw"] = True
         log(f"Bangumi 立绘补全：{hit} 个角色")
 
+    # 合并多源补图（scripts/fetch_extra_images.py：萌娘百科 / Fandom / VNDB）
+    extra_path = os.path.join(RAW, "images_extra.jsonl")
+    if os.path.exists(extra_path):
+        extra = {str(r.get("id")): r for r in read_jsonl(extra_path) if r.get("image")}
+        hit = 0
+        for rec in anilist + vndb + bangumi_rows:      # 注意：此处 records 还没合并
+            info = extra.get(rec["ids"][0]) or extra.get(str(rec.get("sid") or ""))
+            if not info:
+                continue
+            src = info.get("source") or "extra"
+            if not rec.get("image"):
+                rec["image"] = info["image"]
+                rec["thumb"] = info.get("thumb") or info["image"]
+                hit += 1
+            else:
+                # 已有图时把新来源排进备用线路（前端多线路兜底会用到）
+                for url in (info.get("thumb"), info.get("image")):
+                    if url and url not in (rec.get("alt_images") or []):
+                        rec.setdefault("alt_images", []).append(url)
+            rec.setdefault("tags", [])
+            if src and src not in rec["tags"]:
+                rec["tags"] = ([f"图源:{src}"] + rec["tags"])[:14]
+        log(f"多源补图：{hit} 条角色补到了立绘（缓存 {len(extra)} 条）")
+
     # 合并 R18 标记（scripts/flag_nsfw.py 生成）
     nsfw_path = os.path.join(RAW, "vndb_nsfw.json")
     if os.path.exists(nsfw_path):

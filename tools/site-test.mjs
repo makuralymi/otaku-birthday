@@ -80,6 +80,7 @@ function setNative(el, value) {
   el.dispatchEvent(new window.Event('change', { bubbles: true }));
 }
 const routeChainOf = (c, o) => window.__spj.routeChain(c, o);
+const mountImage0 = (img, chain, opts) => window.__spj.mountImage(img, chain, opts);
 const stateOf = () => window.__spj.getState();
 
 const results = [];
@@ -196,6 +197,15 @@ check('全部失败落到本地占位图', routes[routes.length - 1] === 'placeh
 check('无立绘角色直接落纯色占位图', $$('.card img').some((i) => i.dataset.route === 'placeholder'),
   `${$$('.card img').filter((i) => i.dataset.route === 'placeholder').length} 张占位卡`);
 check('占位图是纯色（无渐变）', !decodeURIComponent($('.card img').getAttribute('src') || '').includes('Gradient'), 'svg ok');
+
+// Fandom 图源需要带 Referer，前端按域名切换 referrer 策略
+const fandomChar = { id: 'x-fandom', thumb: 'https://static.wikia.nocookie.net/umamusume/images/2/23/Grass_Wonder_%28Main%29.png', image: '', alts: [], palette: '' };
+const fandomImg = window.document.createElement('img');
+mountImage0(fandomImg, routeChainOf(fandomChar, { size: 'thumb' }), { char: fandomChar });
+check('Fandom 图改用带 Referer 策略', fandomImg.referrerPolicy === 'origin-when-cross-origin', fandomImg.referrerPolicy);
+const normalImg = window.document.createElement('img');
+mountImage0(normalImg, routeChainOf({ id: 'x-n', thumb: 'https://t.vndb.org/ch/32/22132.jpg', alts: [], palette: '' }, { size: 'thumb' }), { char: {} });
+check('其它图源仍用 no-referrer', normalImg.referrerPolicy === 'no-referrer', normalImg.referrerPolicy);
 
 const st = stateOf();
 const vndbChar = st.rows.find((r) => r.src === 'vndb' && /t\.vndb\.org/.test(r.thumb));

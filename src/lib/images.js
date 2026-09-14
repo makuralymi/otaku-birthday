@@ -38,6 +38,17 @@ export async function loadLocalManifest() {
 
 export const hasLocalManifest = () => Object.keys(MANIFEST.images).length > 0;
 
+/** 该用哪种 referrer 策略：少数图源（Fandom 的 nocookie.net）必须带 Referer 才不 403 */
+function referrerPolicyFor(url) {
+  try {
+    const host = new URL(url, location.href).hostname.toLowerCase();
+    for (const [suffix, policy] of Object.entries(CONFIG.referrerOverrides || {})) {
+      if (host.endsWith(suffix)) return policy;
+    }
+  } catch { /* 用默认策略 */ }
+  return CONFIG.referrerPolicy;
+}
+
 function mirrorsOf(url) {
   const host = hostOf(url);
   if (!host) return [];
@@ -112,7 +123,7 @@ export function mountImage(img, chain, { char, onRoute, priority = false } = {})
   const apply = (c) => {
     if (c.cors) img.setAttribute('crossorigin', 'anonymous');
     else img.removeAttribute('crossorigin');
-    img.referrerPolicy = CONFIG.referrerPolicy;
+    img.referrerPolicy = referrerPolicyFor(c.url);
     img.dataset.route = c.route;
     img.src = c.url;
     if (onRoute) onRoute(c);

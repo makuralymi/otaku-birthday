@@ -44,11 +44,12 @@ python3 scripts/fetch_anilist.py      # ① AniList：动画/漫画/轻小说角
 python3 scripts/fetch_vndb.py         # ② VNDB：GalGame / 视觉小说角色
 python3 scripts/fetch_bangumi_dump.py # ③ Bangumi 官方全量 dump：GalGame + 二次元手游/主机游戏角色
 python3 scripts/enrich_bangumi_ids.py # ④ 给上一步的角色补立绘与简介（按角色 id 直查，可中断续跑）
-python3 scripts/build_dataset.py      # ⑤ 合并去重 → public/data/days/*.csv + search-index.csv + meta.json
-python3 scripts/enrich_bangumi.py     # ⑥ Bangumi：补中文名 / 中文简介 / 中文作品名（可中断续跑）
-python3 scripts/flag_nsfw.py          # ⑦ 可选：标记 R18 立绘（默认隐藏）
-python3 scripts/build_dataset.py      # ⑧ 合并中文与标记后重新生成
-python3 scripts/cache_images.py --limit 200   # ⑨ 可选：把热门立绘缓存到本地（离线可用）
+python3 scripts/fetch_extra_images.py # ⑤ 仍有缺图的角色：去萌娘百科 / Fandom / VNDB 找（可中断续跑）
+python3 scripts/build_dataset.py      # ⑥ 合并去重 → public/data/days/*.csv + search-index.csv + meta.json
+python3 scripts/enrich_bangumi.py     # ⑦ Bangumi：补中文名 / 中文简介 / 中文作品名（可中断续跑）
+python3 scripts/flag_nsfw.py          # ⑧ 可选：标记 R18 立绘（默认隐藏）
+python3 scripts/build_dataset.py      # ⑨ 合并中文与标记后重新生成
+python3 scripts/cache_images.py --limit 200   # ⑩ 可选：把热门立绘缓存到本地（离线可用）
 python3 scripts/build_dataset.py --single     # 可选：额外出全量 characters.csv 与按月分片
 ```
 
@@ -58,6 +59,7 @@ python3 scripts/build_dataset.py --single     # 可选：额外出全量 charact
 | `fetch_vndb.py` | [VNDB](https://vndb.org) kana API | 按 `birthday != null` 过滤，取角色与作品评分 |
 | `fetch_bangumi_dump.py` | [Bangumi Archive](https://github.com/bangumi/Archive) 官方全量 dump | 一次下载拿到 22 万角色、68 万条目、11 万游戏条目；只导入「有游戏登场 + 有生日」的角色，infobox 里直接带中文名与生日，GalGame 用标签/游戏类型区分 |
 | `enrich_bangumi_ids.py` | [Bangumi](https://bgm.tv) v0 API | 按角色 id 补立绘与简介（1 请求/角色，限速 1.05s，可中断续跑） |
+| `fetch_extra_images.py` | [萌娘百科](https://zh.moegirl.org.cn) · [Fandom](https://www.fandom.com) · [VNDB](https://vndb.org) | 仍未补到立绘的角色按来源分层找图：萌百/Fandom 用 `prop=pageimages` 批量问（50 标题/请求），VNDB 按名字搜索并校验生日一致 |
 | `build_dataset.py` | 本地 | 跨源去重（同名 + 同生日）、分类、热度、色板预计算、写 CSV 与统计 |
 | `enrich_bangumi.py` | [Bangumi](https://bgm.tv) v0 API | 日文名检索 + 严格打分匹配，同作品只查一次，未命中的下次重试 |
 | `flag_nsfw.py` | VNDB | 按图片 sexual/violence 标记打 R18 标 |
@@ -98,6 +100,20 @@ python3 scripts/build_dataset.py --single     # 可选：额外出全量 charact
 | `palette` | 构建期预计算色板（给不允许跨域取色的图源兜底） |
 | `url_al` / `url_bgm` / `url_vndb` / `bgm_id` | 原始条目链接 |
 
+## 立绘缺口是怎么补的（多源找图）
+
+Bangumi 的全量 dump 只有文字没有图片地址，所以有约 1 万条角色一开始没有立绘。补图按「准确度 vs 成本」分层：
+
+| 顺序 | 来源 | 方式 | 单请求覆盖 | 说明 |
+| --- | --- | --- | --- | --- |
+| ① | Bangumi v0 API（按角色 id） | `GET /v0/characters/{id}` | 1 个角色 | 最权威（图 + 简介），限速 1.05s，`enrich_bangumi_ids.py` 后台逐批跑 |
+| ② | 萌娘百科 | `prop=pageimages`（页面主图） | **50 个标题** | 角色页主图通常就是立绘；图片在 `storage.moegirl.org.cn`，可热链且带 CORS，浏览器能直接取色 |
+| ③ | Fandom | `prop=pageimages`（按作品映射到对应 wiki） | **50 个标题** | 用罗马音/英文标题检索，过滤 icon/card 类图；`static.wikia.nocookie.net` 要求带 Referer，前端对 `nocookie.net` 单独改用 `origin-when-cross-origin` |
+| ④ | VNDB | 按名字搜索 + **校验生日一致** | 1 个角色 | GalGame 侧最准，命中才采用 |
+
+所有来源的结果都会写进同一个 `raw/images_extra.jsonl`，构建时：**主图空缺就补上，已有图则排进 `alts` 备用线路** ——
+所以前端那套「六条线路依次降级」对每个角色都成立。
+
 ## 数据是怎么去重的
 
 跨源（AniList / VNDB / Bangumi）与源内都会去重，判据是**「同名 + 同生日」**：
@@ -120,7 +136,7 @@ python3 scripts/build_dataset.py --single     # 可选：额外出全量 charact
 | --- | --- | --- |
 | ① | 本地缓存 | 跑过 `cache_images.py` 才启用；离线 / CDN 全挂也能看图 |
 | ② | 原站 CDN | AniList / Bangumi / VNDB 直连，画质与出处最可信 |
-| ③ | 跨站备用 | 数据里 `alts` 列：另一数据库里同一角色的立绘（不同域名） |
+| ③ | 跨站备用 | 数据里 `alts` 列：另一数据库 / 其它站点（萌娘百科、Fandom、VNDB）里同一角色的立绘 |
 | ④ | 同内容镜像 | 如 VNDB `t.vndb.org ↔ s.vndb.org`，换域名不换内容 |
 | ⑤ | 第三方代理 | `i0.wp.com` / `wsrv.nl`，可跨域、可缩放；**仅在前四条都失败时使用** |
 | ⑥ | 本地占位图 | 用角色自己的色板现画一张纯色 SVG，零网络、永不失败 |
