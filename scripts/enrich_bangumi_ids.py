@@ -17,7 +17,10 @@ import os
 import sys
 import time
 
+import threading
+
 from common import RAW, append_jsonl, bgm_cid, log, norm_space, read_jsonl
+from parallel import RateLimiter, parallel_map
 
 API = "https://api.bgm.tv/v0/characters/{id}"
 OUT = os.path.join(RAW, "bangumi_images.jsonl")
@@ -35,6 +38,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=1200)
     ap.add_argument("--only-missing-image", action="store_true", default=True)
+    ap.add_argument("--workers", type=int, default=5, help="并发线程数")
+    ap.add_argument("--rps", type=float, default=3.0, help="对该站点的请求速率上限（请求/秒）")
     args = ap.parse_args()
 
     if not os.path.exists(DUMP):
@@ -46,36 +51,48 @@ def main() -> int:
     todo = [r for r in rows if bgm_cid(r) and bgm_cid(r) not in done]
     todo.sort(key=lambda r: -(r.get("collects") or 0))
     todo = todo[: args.limit]
-    log(f"Bangumi 补图：候选 {len(rows)}，已完成 {len(done)}，本次处理 {len(todo)}（{SLEEP}s/请求）")
+    log(f"Bangumi 补图：候选 {len(rows)}，已完成 {len(done)}，本次处理 {len(todo)}"
+        f"（{args.workers} 线程 / 限速 {args.rps} req/s）")
     if not todo:
         return 0
 
-    ok = 0
-    for i, row in enumerate(todo, 1):
+    lock = threading.Lock()
+    limiter = RateLimiter(rps=args.rps)
+    stat = {"ok": 0}
+
+    def work(row: dict):
         cid = bgm_cid(row)
         if not cid:
-            continue
+            return None
         try:
             data = fetch(cid)
         except Exception as e:  # noqa: BLE001
             log(f"  ! {cid} 失败：{e}")
-            time.sleep(SLEEP)
-            continue
-        time.sleep(SLEEP)
+            return None
         images = (data or {}).get("images") or {}
-        stat = (data or {}).get("stat") or {}
+        st = (data or {}).get("stat") or {}
         rec = {
             "bgm_id": cid,
             "image": images.get("large") or images.get("medium") or "",
             "image_medium": images.get("medium") or images.get("large") or "",
             "summary": norm_space(((data or {}).get("summary") or "").replace("\r", " ").replace("\n", " "))[:400],
-            "collects": stat.get("collects") or 0,
+            "collects": st.get("collects") or 0,
             "nsfw": bool((data or {}).get("nsfw")),
         }
-        append_jsonl(OUT, rec)
-        ok += 1 if rec["image"] else 0
-        if i % 20 == 0 or i == len(todo):
-            log(f"  进度 {i}/{len(todo)}  拿到立绘 {ok}")
+        with lock:                      # 边跑边落盘，中断不丢
+            append_jsonl(OUT, rec)
+            if rec["image"]:
+                stat["ok"] += 1
+        return rec
+
+    parallel_map(
+        todo, work,
+        workers=args.workers, limiter=limiter,
+        on_progress=lambda d, t, ok: log(f"  进度 {d}/{t}  拿到立绘 {stat['ok']}"),
+        progress_every=50,
+        label="bgm",
+    )
+    ok = stat["ok"]
     log(f"完成：{ok}/{len(todo)} 拿到立绘 → {OUT}")
     return 0
 

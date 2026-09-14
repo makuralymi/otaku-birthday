@@ -31,11 +31,13 @@ import glob
 import json
 import os
 import re
+import threading
 import sys
 import time
 from collections import defaultdict
 
 from common import DATA, RAW, append_jsonl, log, norm_name, post_json, read_jsonl, request
+from parallel import RateLimiter, parallel_map
 
 OUT = os.path.join(RAW, "images_extra.jsonl")
 UA = "otaku-birthday/1.0 (+https://github.com/makuralymi/otaku-birthday; makuraly@outlook.com)"
@@ -121,100 +123,164 @@ def title_variants(char: dict, prefer: str = "cn") -> list[str]:
     return out[:4]
 
 
-def moegirl_batch(chars: list[dict], width: int = 400) -> dict[str, dict]:
-    """萌娘百科：批量问「页面主图」（角色页主图基本就是立绘）。
-
-    实测 storage.moegirl.org.cn 可热链、带 CORS（浏览器能直接取色），
-    接口返回的 thumbnail 就是 400px 版本，无需自己拼缩略图参数。
-    """
+def _chunk_titles(chars: list[dict], prefer: str, budget: int = 600, per_chunk: int = 12) -> list[tuple[list[str], dict]]:
+    """把角色切成若干「标题块」：每块 ≤budget 字符、≤per_chunk 个角色（并发单位）。"""
+    chunks: list[tuple[list[str], dict]] = []
     by_title: dict[str, dict] = {}
     titles: list[str] = []
-    for c in chars:
-        for t in title_variants(c, prefer="cn"):
-            if t not in by_title and sum(len(x) + 1 for x in titles) + len(t) < 1400:
-                by_title[t] = c
-                titles.append(t)
-    if not titles:
-        return {}
+    size = 0
+    budget_used = 0
 
+    def flush():
+        nonlocal by_title, titles, size, budget_used
+        if titles:
+            chunks.append((titles, by_title))
+        by_title, titles, size, budget_used = {}, [], 0, 0
+
+    for c in chars:
+        cand = [t for t in title_variants(c, prefer=prefer) if t not in by_title]
+        if not cand:
+            continue
+        need = sum(len(t) + 1 for t in cand)
+        if titles and (budget_used + need > budget or size >= per_chunk):
+            flush()
+        for t in cand:
+            by_title[t] = c
+            titles.append(t)
+            budget_used += len(t) + 1
+        size += 1
+    flush()
+    return chunks
+
+
+def moegirl_resolve(chars: list[dict], width: int = 400, verbose=None, on_batch=None,
+                    workers: int = 6, rps: float = 3.0) -> dict[str, dict]:
+    """萌娘百科：批量问「页面主图」（并发 + 限速）。
+
+    图片在 storage.moegirl.org.cn：可热链、带 CORS（浏览器能直接取色）；
+    接口给的 thumbnail 就是 400px 版本，无需自己拼缩略图参数。
+    """
+    chunks = _chunk_titles(chars, prefer="cn")
+    limiter = RateLimiter(rps=rps)
     out: dict[str, dict] = {}
-    try:
-        data = api_get(MOEGIRL_API, {
-            "action": "query", "format": "json", "formatversion": "2",
-            "prop": "pageimages", "piprop": "original|thumbnail", "pithumbsize": str(width),
-            "titles": "|".join(titles),
-        })
-    except Exception as e:  # noqa: BLE001
-        log(f"  ! 萌百请求失败：{e}")
-        return {}
-    sleep()
-    for page in (data.get("query", {}) or {}).get("pages", []) or []:
-        if page.get("missing"):
-            continue
-        char = by_title.get(page.get("title") or "")
-        if not char or char["id"] in out:
-            continue
-        orig = (page.get("original") or {}).get("source") or ""
-        thumb = (page.get("thumbnail") or {}).get("source") or orig
-        if not orig:
-            continue
-        out[char["id"]] = {"image": orig, "thumb": thumb, "source": "moegirl", "title": page.get("title")}
+    lock = threading.Lock()
+
+    def work(chunk):
+        titles, by_title = chunk
+        data = None
+        for attempt in range(3):
+            limiter.acquire()
+            try:
+                data = api_get(MOEGIRL_API, {
+                    "action": "query", "format": "json", "formatversion": "2",
+                    "prop": "pageimages", "piprop": "original|thumbnail", "pithumbsize": str(width),
+                    "titles": "|".join(titles),
+                })
+                break
+            except Exception as e:  # noqa: BLE001
+                if attempt == 2:
+                    log(f"    ! 萌百失败（{e}）")
+                else:
+                    time.sleep(2 + attempt * 3)
+        if not data:
+            return None
+        got = {}
+        for page in (data.get("query", {}) or {}).get("pages", []) or []:
+            if page.get("missing"):
+                continue
+            char = by_title.get(page.get("title") or "")
+            if not char:
+                continue
+            orig = (page.get("original") or {}).get("source") or ""
+            thumb = (page.get("thumbnail") or {}).get("source") or orig
+            if orig:
+                got[char["id"]] = {"image": orig, "thumb": thumb, "source": "moegirl",
+                                   "title": page.get("title")}
+        return got
+
+    def on_result(got):
+        with lock:
+            out.update({k: v for k, v in got.items() if k not in out})
+            if on_batch:
+                on_batch(dict(got))
+
+    parallel_map(chunks, work, workers=workers, on_result=on_result,
+                 on_progress=verbose, progress_every=10, label="moegirl")
     return out
 
 
-# ─────────────────────────── ② Fandom ───────────────────────────
-
-
 def fandom_wiki_of(char: dict) -> str | None:
-    blob = " ".join([(char.get("work") or ""), (char.get("work_cn") or ""), (char.get("work_romaji") or ""),
-                     " ".join(w.get("t", "") + w.get("cn", "") for w in (char.get("works") or [])[:3])]).lower()
+    """角色的主作品能对应到哪个 Fandom wiki（没有就返回 None，不做无谓请求）"""
+    blob = " ".join([
+        (char.get("work") or ""), (char.get("work_cn") or ""),
+        " ".join((w.get("t", "") or "") + (w.get("cn", "") or "") for w in (char.get("works") or [])[:3]),
+    ]).lower()
     for wiki, keys in FANDOM_WIKIS.items():
         if any(k.lower() in blob for k in keys):
             return wiki
     return None
 
 
-def fandom_batch(chars: list[dict], width: int = 400) -> dict[str, dict]:
-    """Fandom：pageimages 批量问，标题用罗马音/英文优先；icon/card 类图不采用。"""
+def fandom_resolve(chars: list[dict], width: int = 400, verbose=None, on_batch=None,
+                   workers: int = 6, rps: float = 4.0) -> dict[str, dict]:
+    """Fandom：按作品映射到对应 wiki，并发批量问 pageimages（标题用罗马音/英文优先）。
+
+    static.wikia.nocookie.net 要求带 Referer 才不 403（前端已按域名切换策略）；
+    icon/card 类图不采用，宁可留空让别的源来补。
+    """
     by_wiki: dict[str, list[dict]] = defaultdict(list)
     for c in chars:
         wiki = fandom_wiki_of(c)
         if wiki:
             by_wiki[wiki].append(c)
 
-    out: dict[str, dict] = {}
+    jobs = []
     for wiki, items in by_wiki.items():
-        by_title: dict[str, dict] = {}
-        titles: list[str] = []
-        for c in items:
-            for t in title_variants(c, prefer="en"):
-                if t not in by_title and sum(len(x) + 1 for x in titles) + len(t) < 1400:
-                    by_title[t] = c
-                    titles.append(t)
-        if not titles:
-            continue
-        try:
-            data = api_get(FANDOM_API.format(wiki=wiki), {
-                "action": "query", "format": "json", "formatversion": "2",
-                "prop": "pageimages", "piprop": "thumbnail|original", "pithumbsize": str(width),
-                "titles": "|".join(titles),
-            })
-        except Exception as e:  # noqa: BLE001
-            log(f"  ! Fandom {wiki} 失败：{e}")
-            continue
-        sleep()
+        for titles, by_title in _chunk_titles(items, prefer="en"):
+            jobs.append((wiki, titles, by_title))
+
+    limiter = RateLimiter(rps=rps)
+    out: dict[str, dict] = {}
+    lock = threading.Lock()
+
+    def work(job):
+        wiki, titles, by_title = job
+        for attempt in range(2):
+            limiter.acquire()
+            try:
+                data = api_get(FANDOM_API.format(wiki=wiki), {
+                    "action": "query", "format": "json", "formatversion": "2",
+                    "prop": "pageimages", "piprop": "thumbnail|original", "pithumbsize": str(width),
+                    "titles": "|".join(titles),
+                })
+                break
+            except Exception as e:  # noqa: BLE001
+                if attempt == 1:
+                    log(f"    ! Fandom {wiki} 失败：{e}")
+                data = None
+        if not data:
+            return None
+        got = {}
         for page in (data.get("query", {}) or {}).get("pages", []) or []:
             char = by_title.get(page.get("title") or "")
-            if not char or page.get("missing") or char["id"] in out:
+            if not char or page.get("missing"):
                 continue
             thumb = (page.get("thumbnail") or {}).get("source") or ""
             orig = (page.get("original") or {}).get("source") or thumb
-            if not thumb:
+            if not thumb or re.search(r"(icon|card|emblem|avatar|logo)", orig, re.I):
                 continue
-            if re.search(r"(icon|card|emblem|avatar|logo)", orig, re.I):
-                continue          # 图标类不采用，宁可留空让其它源来补
-            out[char["id"]] = {"image": orig, "thumb": thumb, "source": f"fandom:{wiki}",
-                               "title": page.get("title")}
+            got[char["id"]] = {"image": orig or thumb, "thumb": thumb,
+                               "source": f"fandom:{wiki}", "title": page.get("title")}
+        return got
+
+    def on_result(got):
+        with lock:
+            out.update({k: v for k, v in got.items() if k not in out})
+            if on_batch:
+                on_batch(dict(got))
+
+    parallel_map(jobs, work, workers=workers, on_result=on_result,
+                 on_progress=verbose, progress_every=10, label="fandom")
     return out
 
 
@@ -269,13 +335,20 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=2000)
     ap.add_argument("--sources", default="moegirl,fandom,vndb")
     ap.add_argument("--batch", type=int, default=50)
+    ap.add_argument("--workers", type=int, default=6, help="并发线程数（每站点独立限速）")
+    ap.add_argument("--rps", type=float, default=3.0, help="每站点请求速率上限")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     sources = [s.strip() for s in args.sources.split(",") if s.strip()]
 
-    done = {r["id"] for r in read_jsonl(OUT)}   # 含未命中（避免重复尝试）
+    # 已命中的不再处理；未命中的允许再试一次（记 tries，避免无限重试）
+    cached = read_jsonl(OUT)
+    done = {r["id"] for r in cached if r.get("image")}
+    done |= {r["id"] for r in cached if r.get("miss") and (r.get("tries") or 1) >= 2}
+    tried = {r["id"]: (r.get("tries") or 1) for r in cached if r.get("miss")}
     todo = [c for c in load_missing(args.limit + len(done)) if c["id"] not in done][: args.limit]
-    log(f"多源补图：缺图候选 {len(todo)} 个（已解决 {len(done)}），来源 {'/'.join(sources)}")
+    log(f"多源补图：缺图候选 {len(todo)} 个（已解决 {len(done)}），来源 {'/'.join(sources)}"
+        f"，并发 {args.workers} 线程 / 每站点限速 {args.rps} req/s")
     if not todo:
         return 0
 
@@ -291,20 +364,17 @@ def main() -> int:
         resolved.update(new)
 
     if "fandom" in sources:
-        for i in range(0, len(todo), args.batch):
-            chunk = todo[i : i + args.batch]
-            got = fandom_batch(chunk)
-            flush(got)
-            stats["fandom"] += len(got)
-            log(f"  fandom {i+len(chunk)}/{len(todo)}  命中 {stats['fandom']}")
+        got = fandom_resolve(todo, verbose=lambda i, n, o=0: log(f"  fandom {i}/{n} 累计命中 {o}"),
+                             on_batch=flush, workers=args.workers, rps=args.rps + 1)
+        flush(got)
+        stats["fandom"] += len(got)
 
     if "moegirl" in sources:
         rest = [c for c in todo if c["id"] not in resolved]
-        for i in range(0, len(rest), args.batch):
-            got = moegirl_batch(rest[i : i + args.batch])
-            flush(got)
-            stats["moegirl"] += len(got)
-            log(f"  moegirl {i+len(rest[i:i+args.batch])}/{len(rest)}  命中 {stats['moegirl']}")
+        got = moegirl_resolve(rest, verbose=lambda i, n, o=0: log(f"  moegirl {i}/{n} 累计命中 {o}"),
+                              on_batch=flush, workers=args.workers, rps=args.rps)
+        flush(got)
+        stats["moegirl"] += len(got)
 
     if "vndb" in sources:
         rest = [c for c in todo if c["id"] not in resolved and ("Galgame" in c["types"] or "游戏" in c["types"])]
@@ -328,7 +398,8 @@ def main() -> int:
     # 记录未命中的，避免下次重复尝试
     for c in todo:
         if c["id"] not in resolved:
-            append_jsonl(OUT, {"id": c["id"], "image": "", "source": "", "miss": True})
+            append_jsonl(OUT, {"id": c["id"], "image": "", "source": "", "miss": True,
+                               "tries": (tried.get(c["id"], 0) + 1)})
     log(f"完成：命中 {len(resolved)}/{len(todo)}（{time.time()-t0:.0f}s）"
         f" 明细 " + ", ".join(f"{k}={v}" for k, v in stats.items()) + f" → {OUT}")
     return 0

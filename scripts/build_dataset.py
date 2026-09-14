@@ -169,6 +169,47 @@ def from_anilist(raw: dict) -> dict:
     }
 
 
+def from_bwiki(raw: dict) -> dict:
+    """B 站 wiki（bwiki）导入的游戏角色：中文名 + 生日 + 立绘。"""
+    works = []
+    for w in raw.get("works") or []:
+        works.append({
+            "tid": w.get("id"), "t": w.get("title") or "", "tr": "", "cn": w.get("title_cn") or "",
+            "ty": CAT_GAME, "y": w.get("year"), "pop": 0, "rank": w.get("rank") or 0,
+            "staff": w.get("staff") or "", "src": "bwiki",
+        })
+    return {
+        "src": "bwiki",
+        "sid": raw["source_id"],
+        "ids": [raw["source_id"]],
+        "month": int(raw["month"]),
+        "day": int(raw["day"]),
+        "year": None,
+        "name_native": raw.get("name_native") or "",
+        "name_romaji": raw.get("name_romaji") or "",
+        "name_cn": raw.get("name_cn") or "",
+        "alt_names": [a for a in (raw.get("alt_names") or []) if a][:6],
+        "gender": norm_gender(raw.get("gender") or ""),
+        "blood": (raw.get("blood_type") or "").upper()[:4],
+        "age": "",
+        "summary": short_summary(raw.get("summary") or ""),
+        "summary_lang": "zh",
+        "image": raw.get("image") or "",
+        "thumb": raw.get("image_medium") or raw.get("image") or "",
+        "alt_images": [],
+        "works": works[:MAX_WORKS],
+        "fav": 0, "votes": 0,
+        "collects": int(raw.get("collects") or 0),
+        "nsfw": bool(raw.get("nsfw")),
+        "tags": ["来源:bwiki"],
+        "url_al": "", "url_vndb": "", "url_bgm": "",
+        "bgm_id": "",
+        "url": raw.get("url") or "",
+        "types": [CAT_GAME],
+        "ptype": CAT_GAME,
+    }
+
+
 def from_bangumi_dump(raw: dict) -> dict:
     """Bangumi 官方 dump 导入的游戏角色（GalGame / 二次元游戏为主）。"""
     works = []
@@ -605,6 +646,9 @@ def main(single: bool = False) -> None:
     t0 = time.time()
     anilist = [from_anilist(r) for r in read_jsonl(os.path.join(RAW, "anilist.jsonl"))]
     bangumi_rows = [from_bangumi_dump(r) for r in read_jsonl(os.path.join(RAW, "bangumi_dump.jsonl"))]
+    bwiki_rows = [from_bwiki(r) for r in read_jsonl(os.path.join(RAW, "bwiki.jsonl"))]
+    if bwiki_rows:
+        log(f"读取原始数据：bwiki {len(bwiki_rows)} 条（B 站 wiki 游戏角色）")
     log(f"读取原始数据：Bangumi dump {len(bangumi_rows)} 条（游戏角色）")
     vndb_all = [from_vndb(r) for r in read_jsonl(os.path.join(RAW, "vndb.jsonl"))]
     log(f"读取原始数据：AniList {len(anilist)} 条，VNDB {len(vndb_all)} 条")
@@ -643,7 +687,7 @@ def main(single: bool = False) -> None:
     if os.path.exists(extra_path):
         extra = {str(r.get("id")): r for r in read_jsonl(extra_path) if r.get("image")}
         hit = 0
-        for rec in anilist + vndb + bangumi_rows:      # 注意：此处 records 还没合并
+        for rec in anilist + vndb + bangumi_rows + bwiki_rows:   # 注意：此处 records 还没合并
             info = extra.get(rec["ids"][0]) or extra.get(str(rec.get("sid") or ""))
             if not info:
                 continue
@@ -674,7 +718,7 @@ def main(single: bool = False) -> None:
                 hit += 1
         log(f"R18 标记：{hit} 个 VNDB 角色默认隐藏")
 
-    records = anilist + vndb + bangumi_rows
+    records = anilist + vndb + bangumi_rows + bwiki_rows
     records, dup = dedupe(records)
     log(f"跨源去重合并 {dup} 条，剩余 {len(records)} 条")
 
@@ -880,7 +924,8 @@ def main(single: bool = False) -> None:
     log(f"  待中文补全队列：{len(queue)} 条 → raw/bangumi_queue.json")
     log(f"  来源分布：anilist={sum(1 for r in records if r['src']=='anilist')} "
         f"vndb={sum(1 for r in records if r['src']=='vndb')} "
-        f"bangumi={sum(1 for r in records if r['src']=='bangumi')}")
+        f"bangumi={sum(1 for r in records if r['src']=='bangumi')} "
+        f"bwiki={sum(1 for r in records if r['src']=='bwiki')}")
 
     log(f"完成，共 {len(records)} 个角色，用时 {time.time()-t0:.1f}s")
     log("来源分布：" + ", ".join(f"{k}={v}" for k, v in src_counts.items()))
