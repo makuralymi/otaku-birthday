@@ -241,6 +241,14 @@ await until(() => ($('#date-label')?.textContent || '').includes('4 月'), 6000)
 await wait(220);
 check('切回 4 月仍然生效', $('#sel-month')?.value === '4', `select=${$('#sel-month')?.value}`);
 
+/* ── 10.8 页脚项目地址 ─────────────────────────────── */
+const repo = $('#repo-link');
+check('页脚有项目地址链接', !!repo && repo.textContent.includes('项目地址')
+  && /^https:\/\/github\.com\//.test(repo.getAttribute('href') || ''), `${repo?.textContent?.trim()} → ${repo?.getAttribute('href')}`);
+check('项目地址带 GitHub 图标', !!repo?.querySelector('svg path'), repo?.querySelector('svg') ? 'svg ok' : '缺少图标');
+check('外链安全属性', repo?.getAttribute('target') === '_blank' && (repo?.getAttribute('rel') || '').includes('noopener'),
+  `target=${repo?.getAttribute('target')} rel=${repo?.getAttribute('rel')}`);
+
 /* ── 11. 无 JS 报错 ────────────────────────────────── */
 const realErrors = errors.filter((e) => !/navigation to another Document|Not implemented/.test(e));
 check('无 JS 运行错误', realErrors.length === 0, realErrors.slice(0, 2).join(' | ').slice(0, 160));

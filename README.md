@@ -21,6 +21,7 @@
 - 📄 **CSV 数据**：按月分片（`public/data/months/MM.csv`），一键导出当前结果
 - 🛣 **多线路兜底**：立绘六条线路依次降级，数据文件也有兜底（见下）
 - ⌨️ 键盘可用（←/→ 换角色或换日期，Esc 关闭），尊重 `prefers-reduced-motion`
+- 🔗 页脚带「项目地址」入口与 GitHub 图标
 
 ## 技术栈与命令
 
@@ -29,7 +30,7 @@ npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
 npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：51 项断言
+npm test             # jsdom 自测：54 项断言
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -134,9 +135,9 @@ npx esbuild src/main.jsx --bundle --format=iife --jsx=automatic \
 node tools/site-test.mjs
 ```
 
-51 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
+54 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
 搜索空态、排序、详情抽屉（色板 / 作品 / 来源链接）、收藏写入 localStorage、导出 CSV、分享、
-日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、无 JS 报错。
+日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、无 JS 报错。
 
 ## 常见问题
 
