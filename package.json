@@ -21,6 +21,9 @@
     "monet-palette",
     "flat-design"
   ],
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

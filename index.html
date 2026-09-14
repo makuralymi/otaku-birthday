@@ -22,6 +22,28 @@
 <body>
 <div id="root"></div>
 <noscript>本站需要 JavaScript 才能渲染生日查询结果。</noscript>
+<script>
+  // 如果这个「源码目录」被直接当静态站点发布了（没经过 vite build），
+  // 浏览器会因为 MIME 不允许而拒绝加载 /src/main.jsx —— 与其白屏，不如给出修复办法。
+  window.addEventListener('error', function (e) {
+    var el = e && e.target;
+    if (el && el.tagName === 'SCRIPT' && /\/src\/|main\.jsx/.test(el.src || '')) {
+      var box = document.getElementById('root');
+      if (box) {
+        box.innerHTML = '<div style="max-width:640px;margin:12vh auto;padding:28px;border:1px solid #e2ded7;'
+          + 'border-radius:12px;font:15px/1.8 system-ui,PingFang SC,sans-serif;color:#191820;background:#fff">'
+          + '<h1 style="font-size:20px;margin:0 0 12px">这是源码目录，不是构建产物</h1>'
+          + '<p style="margin:0 0 10px">浏览器拒绝加载 <code>/src/main.jsx</code>（MIME 为 text/jsx），所以页面空白。</p>'
+          + '<p style="margin:0 0 6px"><b>Cloudflare Pages / Netlify / Vercel：</b>把构建命令设为 '
+          + '<code>npm run build</code>，把「输出目录」设为 <code>dist</code>，然后重新部署。</p>'
+          + '<p style="margin:0 0 6px"><b>本地预览：</b>先 <code>npm run build</code>，再 <code>npm run preview</code>'
+          + '（或 <code>npx serve dist</code>）。</p>'
+          + '<p style="margin:0"><b>想开发：</b><code>npm run dev</code>（Vite 会即时编译 .jsx）。</p>'
+          + '</div>';
+      }
+    }
+  }, true);
+</script>
 <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

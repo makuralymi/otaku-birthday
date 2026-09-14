@@ -35,6 +35,33 @@ npm test             # jsdom 自测：54 项断言
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
 
+## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
+
+**必须发布构建产物，不能直接发布仓库根目录**：浏览器不认 `.jsx`，直接发布源码目录会报
+
+```
+已拦截加载自 ".../src/main.jsx" 的模块，它使用了不允许的 MIME 类型（"text/jsx"）
+```
+
+Cloudflare Pages 设置（Settings → Build configuration）：
+
+| 项 | 值 |
+| --- | --- |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | 留空（或 `/`） |
+| Node 版本 | 已用 `.nvmrc`（22）与 `package.json` 的 `engines.node`（>=20.19）声明，无需额外设置 |
+
+其它平台同理：Netlify（build `npm run build` / publish `dist`）、Vercel（Framework 选 Vite，Output `dist`）、Nginx（`root /path/to/dist;`）。
+
+仓库里已经放好这些部署相关文件：
+
+- `wrangler.toml` —— `pages_build_output_dir = "dist"`，供 `npx wrangler pages deploy dist` 用
+- `public/_headers` —— 构建时复制到 `dist/`：`/assets/*` 一年强缓存，`/data/days/*` 短缓存 + 正确的 `text/csv` 类型
+- `public/data/**` —— 366 个按天分片 + 搜索索引（最大 214 KB/文件，远低于 CF Pages 单文件上限）
+
+**误发根目录时不会白屏**：`index.html` 里加了自诊断，检测到 `/src/main.jsx` 加载失败会直接显示上面这段修复指引。
+
 ## 数据管道
 
 数据不是手工整理的，而是脚本抓取 → 合并 → 去重 → 补全后生成：

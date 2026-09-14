@@ -1,0 +1,5 @@
+# Cloudflare Pages 配置（Git 集成构建时以控制台设置为准，此文件供 CLI 部署使用）
+#   npx wrangler pages deploy dist
+name = "otaku-birthday"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-01-01"
