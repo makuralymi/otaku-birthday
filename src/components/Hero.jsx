@@ -3,7 +3,7 @@
    全部使用纯色块：没有任何渐变、模糊或半透明叠加。
    ============================================================ */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { daysInMonth, monthName } from '../lib/data.js';
 import { flatPalette, parsePalette, hashColors } from '../lib/palette.js';
 import { placeholderURI } from '../lib/images.js';
@@ -114,38 +114,73 @@ function Picker({ meta, month, day, onChange, onToday, onRandom }) {
   );
 }
 
-/** 人气角色预览：纯色边框小卡，名字放在下方纯色条上 */
+/** 首屏随机预览：从构建期给的候选池里随机抽一批，每次打开都不一样 */
+const GALLERY_SIZE = 24;
+
+const shuffle = (arr) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+/** 抽取下一批：尽量避开当前这批，点「换一批」时才有新鲜感 */
+function pickBatch(all, exclude = []) {
+  const skip = new Set(exclude);
+  const rest = all.filter((f) => !skip.has(f.id));
+  const pool = rest.length >= GALLERY_SIZE ? rest : all;
+  return shuffle(pool).slice(0, GALLERY_SIZE);
+}
+
 function Gallery({ featured, onPick }) {
-  const items = useMemo(() => (featured || []).slice(0, 24).map((f) => {
+  const all = useMemo(() => (featured || []).map((f) => {
     const colors = parsePalette(f.p);
     return { ...f, palette: flatPalette(colors.length > 1 ? colors : hashColors(f.id), f.id) };
   }), [featured]);
 
-  if (!items.length) return null;
+  const [batch, setBatch] = useState([]);
+  useEffect(() => { setBatch(pickBatch(all)); }, [all]);
+
+  if (!all.length) return null;
   return (
-    <div className="gallery" aria-label="人气角色预览">
-      {items.map((f) => (
+    <section className="gallery-block" aria-label="随机角色预览">
+      <div className="gallery-head">
+        <span className="fine">随机看看 · 每次刷新都不一样</span>
         <button
-          key={f.id}
-          className="gallery-item"
+          className="btn small"
+          id="btn-gallery-shuffle"
           type="button"
-          style={{ '--g-surface': f.palette.surface, '--g-line': f.palette.line, '--g-ink': f.palette.ink, '--g-bar': f.palette.blocks[0] }}
-          onClick={() => onPick(f.m, f.d)}
-          title={`${f.m}/${f.d} ${f.n}`}
+          onClick={() => setBatch((cur) => pickBatch(all, cur.map((c) => c.id)))}
         >
-          <img
-            src={LOCAL_IMAGES_ONLY ? placeholderURI({ id: f.id, palette: f.p, nameCn: f.n }) : f.img}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
-          />
-          <span className="gallery-bar" />
-          <span className="gallery-name">{f.n}</span>
+          换一批
         </button>
-      ))}
-    </div>
+      </div>
+      <div className="gallery" id="gallery">
+        {batch.map((f) => (
+          <button
+            key={f.id}
+            className="gallery-item"
+            type="button"
+            style={{ '--g-surface': f.palette.surface, '--g-line': f.palette.line, '--g-ink': f.palette.ink, '--g-bar': f.palette.blocks[0] }}
+            onClick={() => onPick(f.m, f.d)}
+            title={`${f.m}/${f.d} ${f.n}${f.ty ? ' · ' + f.ty : ''}`}
+          >
+            <img
+              src={LOCAL_IMAGES_ONLY ? placeholderURI({ id: f.id, palette: f.p, nameCn: f.n }) : f.img}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+            />
+            <span className="gallery-bar" />
+            <span className="gallery-name">{f.n}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 

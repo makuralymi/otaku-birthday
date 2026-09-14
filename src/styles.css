@@ -473,3 +473,11 @@ section.results, section.calendar-section, section.about {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .01ms !important; }
   html { scroll-behavior: auto; }
 }
+
+/* ── 首屏随机预览（每次刷新换一批） ───────────────────── */
+.gallery-block { margin-top: 22px; }
+.gallery-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 8px; max-width: 720px;
+}
+.gallery-head .fine { color: var(--ink-3); }

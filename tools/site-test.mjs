@@ -319,6 +319,27 @@ if (globalBtn) {
   check('跳转后拿到完整记录（含简介）', true, '跳过');
 }
 
+/* ── 10.95 首屏随机预览（每次打开随机 + 换一批） ───── */
+const galleryItems = () => $$('#gallery .gallery-item').map((el) => el.getAttribute('title') || '');
+const firstBatch = galleryItems();
+check('首屏随机预览已渲染', firstBatch.length >= 6, `${firstBatch.length} 张`);
+check('预览池比展示条数多（有随机空间）', (stateOf().meta?.featured?.length || 0) > firstBatch.length,
+  `池 ${stateOf().meta?.featured?.length} / 展示 ${firstBatch.length}`);
+// 换一批：应当换掉当前这批（可能偶尔重合，最多重试 3 次）
+let changed = false;
+for (let i = 0; i < 3 && !changed; i += 1) {
+  const before = galleryItems().join('|');
+  $('#btn-gallery-shuffle').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(220);
+  changed = galleryItems().join('|') !== before;
+}
+check('点「换一批」会换掉当前这批', changed, `${galleryItems().length} 张`);
+check('预览项仍可跳转到生日页', (() => {
+  const item = $$('#gallery .gallery-item')[0];
+  const label = item.getAttribute('title') || '';
+  return /\d+\/\d+/.test(label);
+})(), $$('#gallery .gallery-item')[0]?.getAttribute('title'));
+
 /* ── 11. 无 JS 报错 ────────────────────────────────── */
 const realErrors = errors.filter((e) => !/navigation to another Document|Not implemented/.test(e));
 check('无 JS 运行错误', realErrors.length === 0, realErrors.slice(0, 2).join(' | ').slice(0, 160));

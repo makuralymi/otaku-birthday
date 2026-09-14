@@ -865,29 +865,52 @@ def main(single: bool = False) -> None:
         for t in rec["types"]:
             type_counts[t] = type_counts.get(t, 0) + 1
         src_counts[rec["src"]] = src_counts.get(rec["src"], 0) + 1
-    featured = []
-    seen_featured: set[str] = set()
-    for rec in records:
-        if rec["nsfw"] or len(featured) >= 30:
-            continue
-        key = norm_name(rec.get("name_native"))[:3]
-        if key in seen_featured:
-            continue
-        seen_featured.add(key)
+    # 首屏人气预览池：混合「人气 Top」与「全年随机抽样」，供前端每次打开随机洗牌展示
+    # （构建期用固定随机种子，保证同一次数据构建可复现；选谁展示由前端决定）
+    import random as _random
+
+    rng = _random.Random(20260914)
+    pool: list[dict] = []
+    seen_pool: set[str] = set()
+
+    def add_featured(rec: dict) -> None:
+        key = rec["id"]
+        if key in seen_pool or rec.get("nsfw"):
+            return
         row = to_row(rec, palette)
-        featured.append(
-            {
-                "id": row["id"],
-                "n": row["name_cn"] or row["name_native"] or row["name_romaji"],
-                "nn": row["name_native"],
-                "m": row["month"],
-                "d": row["day"],
-                "ty": row["ptype"],
-                "w": row["work_cn"] or row["work"],
-                "img": row["thumb"],
-                "p": row["palette"],
-            }
-        )
+        seen_pool.add(key)
+        pool.append({
+            "id": row["id"],
+            "n": row["name_cn"] or row["name_native"] or row["name_romaji"],
+            "m": row["month"],
+            "d": row["day"],
+            "ty": row["ptype"],
+            "img": row["thumb"],
+            "p": " ".join(row["palette"].split()[:3]),
+        })
+
+    # ① 人气 Top 40（同一名字前缀只留一个，避免满屏同一部作品）
+    prefix_seen: set[str] = set()
+    for rec in records:
+        if len(pool) >= 40:
+            break
+        prefix = norm_name(rec.get("name_native") or rec.get("name_romaji"))[:3]
+        if prefix in prefix_seen:
+            continue
+        prefix_seen.add(prefix)
+        add_featured(rec)
+
+    # ② 全年随机抽样填到 96 条（覆盖冷门角色与各种生日）
+    candidates = [r for r in records if not r.get("nsfw") and r["id"] not in seen_pool]
+    rng.shuffle(candidates)
+    for rec in candidates:
+        if len(pool) >= 96:
+            break
+        add_featured(rec)
+
+    featured = pool
+    rng.shuffle(featured)          # 交付顺序也打乱，避免前端只看前几条
+
     meta = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "total": len(records),
