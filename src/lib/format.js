@@ -3,6 +3,7 @@
    ============================================================ */
 
 import { displayName, primaryWork } from './data.js';
+import { CLEAN_BUILD } from './buildflags.js';
 
 /** 12345 → 1.2w；1234 → 1.2k */
 export const compact = (n) => {
@@ -65,8 +66,8 @@ export const shareText = (mode, month, day, count, q) => (mode === 'search'
   ? `生诞绘卷 · 搜索「${q}」`
   : `${month} 月 ${day} 日生日的二次元角色（${count} 位）`);
 
-/** 外链集合 */
-export const linksOf = (c) => [
+/** 外链集合（干净构建下为空数组，详情页不会出现任何跳转到站外的入口） */
+export const linksOf = (c) => (CLEAN_BUILD ? [] : [
   c.urlAl && { label: 'AniList 条目', href: c.urlAl },
   c.urlBgm && { label: 'Bangumi 条目', href: c.urlBgm },
   c.urlVndb && { label: 'VNDB 条目', href: c.urlVndb },
@@ -78,6 +79,6 @@ export const linksOf = (c) => [
     label: 'Google',
     href: `https://www.google.com/search?q=${encodeURIComponent(`${displayName(c)} 生日`)}`,
   },
-].filter(Boolean);
+].filter(Boolean));
 
 export { displayName, primaryWork };

@@ -27,6 +27,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:clean": "node tools/build-clean.mjs",
     "preview": "vite preview --port 4173",
     "test": "node tools/make-test-bundle.mjs && node tools/site-test.mjs"
   },

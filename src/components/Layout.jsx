@@ -3,6 +3,7 @@
    ============================================================ */
 
 import { SRC_LABEL } from '../lib/data.js';
+import { CLEAN_BUILD } from '../lib/buildflags.js';
 
 export function TopBar({ favCount, onOpenFav }) {
   return (
@@ -25,6 +26,7 @@ export function TopBar({ favCount, onOpenFav }) {
 }
 
 export function About({ meta }) {
+  // 干净构建：不出现任何站外链接（数据源仍标注名称，符合署名要求）
   const total = meta?.total || 1;
   const rows = [
     ['anilist', '动画 / 漫画 / 轻小说角色与立绘', meta?.sources?.anilist || 0],
@@ -41,7 +43,11 @@ export function About({ meta }) {
             {rows.map(([key, desc, count]) => (
               <li key={key}>
                 <span>
-                  <b><a href={SRC_LABEL[key].url} target="_blank" rel="noopener noreferrer">{SRC_LABEL[key].name}</a></b>
+                  <b>
+                    {CLEAN_BUILD
+                      ? SRC_LABEL[key].name
+                      : <a href={SRC_LABEL[key].url} target="_blank" rel="noopener noreferrer">{SRC_LABEL[key].name}</a>}
+                  </b>
                   <em>{desc}</em>
                 </span>
                 <span className="fine">{count ? <b>{Math.round((count / total) * 100)}%</b> : '已合并'}</span>
@@ -125,10 +131,12 @@ export function Footer() {
   return (
     <footer className="footer">
       <p>生诞绘卷 · 非商业同人项目 · 数据来自 AniList / Bangumi / VNDB · 角色与作品版权归各自权利人所有</p>
-      <a className="repo-link" id="repo-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">
-        <GitHubIcon />
-        <span>项目地址</span>
-      </a>
+      {CLEAN_BUILD ? null : (
+        <a className="repo-link" id="repo-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <GitHubIcon />
+          <span>项目地址</span>
+        </a>
+      )}
     </footer>
   );
 }

@@ -35,6 +35,29 @@ npm test             # jsdom 自测：54 项断言
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
 
+## 三种构建变体
+
+| 命令 | 产物 | 特点 |
+| --- | --- | --- |
+| `npm run build` | `dist/` | 常规版：带条目外链（AniList / Bangumi / VNDB / 萌百 / Google）、分享按钮、页脚项目地址 |
+| `npm run build:clean` | `dist-clean/` | **无外链、无分享**：去掉全站所有站外链接与分享入口，数据源仍以文字署名（适合不允许外链的平台） |
+| `LOCAL_IMAGES_ONLY=1 OUT_DIR=dist-clean-offline npm run build:clean` | `dist-clean-offline/` | 在上一档基础上**连立绘也不请求站外**：只用本地图缓存（`cache_images.py` 生成的 `img/cache/*`），没有缓存的角色显示纯色占位卡；`index.html` 里的 preconnect/dns-prefetch 也会被移除 |
+
+干净档具体去掉了什么：
+
+- 详情抽屉的「查看来源」外链区（AniList / Bangumi / VNDB / 萌娘百科搜索 / Google）
+- 「关于」区数据源名称上的超链接（**名称保留**，署名不丢）
+- 列表页的「分享」按钮、详情页的「复制分享链接」按钮
+- 页脚的「项目地址」（GitHub 图标 + 链接）
+- 站外图片请求（仅 `LOCAL_IMAGES_ONLY=1` 时；含首屏人气预览、收藏夹缩略图、抽屉大图）
+
+自测覆盖两种模式：
+
+```bash
+npm test            # 常规档：63 项
+CLEAN=1 npm test    # 干净档：61 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+```
+
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
 
 **必须发布构建产物，不能直接发布仓库根目录**：浏览器不认 `.jsx`，直接发布源码目录会报

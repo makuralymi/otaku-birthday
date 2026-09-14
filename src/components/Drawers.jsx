@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { displayName, subName, primaryWork, SRC_LABEL } from '../lib/data.js';
 import { cardVars, paletteForCard, quickPalette } from '../lib/palette.js';
-import { routeChain, mountImage, loadedRouteOf } from '../lib/images.js';
+import { routeChain, mountImage, loadedRouteOf, placeholderURI } from '../lib/images.js';
+import { CLEAN_BUILD, LOCAL_IMAGES_ONLY } from '../lib/buildflags.js';
 import { compact, linksOf } from '../lib/format.js';
 import { PaletteBlocks } from './Hero.jsx';
 
@@ -70,20 +71,22 @@ export function DetailDrawer({ char, index, total, palette, isFav, onClose, onPr
             <button className={`btn small${isFav ? ' on' : ''}`} id="drawer-fav" type="button" onClick={() => onToggleFav(char)}>
               {isFav ? '★ 已收藏' : '☆ 收藏'}
             </button>
-            <button
-              className="btn small"
-              type="button"
-              onClick={async () => {
-                let msg = '分享链接已复制';
-                try { await navigator.clipboard.writeText(location.href); }
-                catch { msg = location.href; }
-                setCopied(msg);
-                onNotify?.(msg);
-                setTimeout(() => setCopied(''), 1800);
-              }}
-            >
-              {copied || '复制分享链接'}
-            </button>
+            {CLEAN_BUILD ? null : (
+              <button
+                className="btn small"
+                type="button"
+                onClick={async () => {
+                  let msg = '分享链接已复制';
+                  try { await navigator.clipboard.writeText(location.href); }
+                  catch { msg = location.href; }
+                  setCopied(msg);
+                  onNotify?.(msg);
+                  setTimeout(() => setCopied(''), 1800);
+                }}
+              >
+                {copied || '复制分享链接'}
+              </button>
+            )}
           </div>
 
           <div className="d-section">
@@ -151,12 +154,14 @@ export function DetailDrawer({ char, index, total, palette, isFav, onClose, onPr
           ) : null}
 
           <div className="d-section">
-            <h4>查看来源</h4>
-            <div className="link-row">
-              {links.map((l) => (
-                <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer">{l.label}</a>
-              ))}
-            </div>
+            <h4>{CLEAN_BUILD ? '数据来源' : '查看来源'}</h4>
+            {links.length ? (
+              <div className="link-row">
+                {links.map((l) => (
+                  <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer">{l.label}</a>
+                ))}
+              </div>
+            ) : null}
             <p className="fine">
               数据源：{SRC_LABEL[char.src]?.name || char.src}
               {char.bgmId ? ' + Bangumi' : ''}
@@ -195,7 +200,15 @@ export function FavoritesDrawer({ favs, onClose, onOpen, onRemove, onExport, onC
               {favs.slice().reverse().map((c) => (
                 <div className="fav-item" key={c.id}>
                   <span className="fav-thumb" style={{ background: quickPalette(c).surface }}>
-                    {c.thumb ? <img src={c.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
+                    {c.thumb || LOCAL_IMAGES_ONLY ? (
+                      <img
+                        src={LOCAL_IMAGES_ONLY ? placeholderURI({ id: c.id, palette: c.palette, nameCn: c.nameCn, nameNative: c.nameNative }) : c.thumb}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : null}
                   </span>
                   <button className="fav-body" type="button" onClick={() => onOpen(c)}>
                     <b>{displayName(c)}</b>

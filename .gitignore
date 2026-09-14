@@ -1,16 +1,7 @@
-# 依赖与构建产物
 node_modules/
 dist/
-
-# 抓取中间产物：大体积、可重新抓取（dump 压缩包 437MB + 解压后 1.2GB）；
-# 只保留几个「花了很久才拿到」的小缓存
-raw/*
-!raw/bangumi.jsonl        # Bangumi 中文补全结果（逐个角色检索得来，最贵）
-!raw/vndb_nsfw.json       # VNDB R18 标记
-!raw/palette_cache.json   # 立绘预计算色板
-raw/dump/                 # Bangumi 全量 dump（用时自动下载）
-
-# Python / 编辑器杂项
+dist-clean*/
+raw/
 __pycache__/
 *.pyc
 .DS_Store

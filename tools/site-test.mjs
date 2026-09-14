@@ -12,12 +12,14 @@ import path from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const BUNDLE = process.env.BUNDLE || '/tmp/otaku-birthday-app.bundle.js';
+const BUNDLE = process.env.BUNDLE
+  || (process.env.CLEAN === '1' ? '/tmp/otaku-birthday-clean.bundle.js' : '/tmp/otaku-birthday-app.bundle.js');
 const bundle = fs.readFileSync(BUNDLE, 'utf8');
 const html0 = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 // 用函数替换，避免 bundle 里的 $& / $' 被当成替换模式
 const html = html0.replace(/<script type="module" src="[^"]+"><\/script>/, () => `<script>${bundle}<\/script>`);
 
+const CLEAN = process.env.CLEAN === '1';
 const errors = [];
 const vc = new VirtualConsole();
 vc.on('jsdomError', (e) => errors.push('jsdomError: ' + e.message));
@@ -62,6 +64,7 @@ const dom = buildDom();
 const { window } = dom;
 if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollIntoView = () => {};
 
+const CLEAN_MODE = process.env.CLEAN === '1';
 const $ = (s) => window.document.querySelector(s);
 const $$ = (s) => [...window.document.querySelectorAll(s)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -137,7 +140,7 @@ await until(() => $('#drawer'));
 check('抽屉打开', !!$('#drawer'), $('#drawer')?.className);
 check('抽屉含色板色块', $$('#drawer-body .swatch').length >= 3, `${$$('#drawer-body .swatch').length} 个`);
 check('抽屉含莫奈取色标题', ($('#drawer-body')?.textContent || '').includes('莫奈取色'));
-check('抽屉含来源链接', $$('#drawer-body .link-row a').length >= 3, `${$$('#drawer-body .link-row a').length} 个`);
+if (!CLEAN) check('抽屉含来源链接', $$('#drawer-body .link-row a').length >= 3, `${$$('#drawer-body .link-row a').length} 个`);
 check('抽屉含作品列表', $$('#drawer-body .work-list li').length >= 1);
 const swatch = $('#drawer-body .swatch');
 swatch.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -172,9 +175,11 @@ check('跳转后卡片/空态二选一', $$('.card').length > 0 || !!$('#empty')
 $('#btn-export').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await until(() => ($('#toast')?.textContent || '').includes('CSV'));
 check('导出 CSV 触发', ($('#toast')?.textContent || '').includes('CSV'), $('#toast')?.textContent);
-$('#btn-share').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-await wait(150);
-check('分享复制链接', /复制|http/.test($('#toast')?.textContent || ''), $('#toast')?.textContent);
+if (!CLEAN) {
+  $('#btn-share').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(150);
+  check('分享复制链接', /复制|http/.test($('#toast')?.textContent || ''), $('#toast')?.textContent);
+}
 
 /* ── 9. 立绘多线路兜底 ─────────────────────────────── */
 const anyImg = $('.card img');
@@ -258,13 +263,27 @@ await until(() => ($('#date-label')?.textContent || '').includes('4 月'), 6000)
 await wait(220);
 check('切回 4 月仍然生效', $('#sel-month')?.value === '4', `select=${$('#sel-month')?.value}`);
 
-/* ── 10.8 页脚项目地址 ─────────────────────────────── */
-const repo = $('#repo-link');
-check('页脚有项目地址链接', !!repo && repo.textContent.includes('项目地址')
-  && /^https:\/\/github\.com\//.test(repo.getAttribute('href') || ''), `${repo?.textContent?.trim()} → ${repo?.getAttribute('href')}`);
-check('项目地址带 GitHub 图标', !!repo?.querySelector('svg path'), repo?.querySelector('svg') ? 'svg ok' : '缺少图标');
-check('外链安全属性', repo?.getAttribute('target') === '_blank' && (repo?.getAttribute('rel') || '').includes('noopener'),
-  `target=${repo?.getAttribute('target')} rel=${repo?.getAttribute('rel')}`);
+/* ── 10.8 页脚项目地址 / 干净构建的外链与分享策略 ───── */
+if (CLEAN) {
+  const extLinks = $$('a').filter((a) => /^https?:/i.test(a.getAttribute('href') || ''));
+  check('干净构建：全站没有任何外链', extLinks.length === 0,
+    extLinks.slice(0, 3).map((a) => a.getAttribute('href')).join(' ') || '0 个');
+  check('干净构建：没有分享按钮', !$('#btn-share'));
+  check('干净构建：页脚没有项目地址', !$('#repo-link'));
+  check('干净构建：详情里没有外链区', $$('#drawer-body .link-row a').length === 0);
+  const about = $('#about')?.textContent || '';
+  check('干净构建：仍标注数据源名称（关于区）',
+    about.includes('AniList') && about.includes('Bangumi') && about.includes('VNDB'), about.slice(0, 40) + '…');
+} else {
+  const repo = $('#repo-link');
+  check('页脚有项目地址链接', !!repo && repo.textContent.includes('项目地址')
+    && /^https:\/\/github\.com\//.test(repo.getAttribute('href') || ''), `${repo?.textContent?.trim()} → ${repo?.getAttribute('href')}`);
+  check('项目地址带 GitHub 图标', !!repo?.querySelector('svg path'), repo?.querySelector('svg') ? 'svg ok' : '缺少图标');
+  check('外链安全属性', repo?.getAttribute('target') === '_blank' && (repo?.getAttribute('rel') || '').includes('noopener'),
+    `target=${repo?.getAttribute('target')} rel=${repo?.getAttribute('rel')}`);
+  check('常规构建：有分享按钮', !!$('#btn-share'));
+  check('常规构建：页脚有站外链接', $$('a[href^="http"]').length >= 1, `${$$('a[href^="http"]').length} 个`);
+}
 
 /* ── 10.9 跨月搜索（瘦身索引 → 跳转生日页） ────────── */
 setNative($('#sel-month'), '1');

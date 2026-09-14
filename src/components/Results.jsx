@@ -8,6 +8,7 @@ import { displayName, subName, primaryWork } from '../lib/data.js';
 import { cardVars, paletteForCard, quickPalette } from '../lib/palette.js';
 import { routeChain, mountImage, loadedRouteOf } from '../lib/images.js';
 import { compact } from '../lib/format.js';
+import { CLEAN_BUILD } from '../lib/buildflags.js';
 
 /** 单张角色卡：进入视口后取色 + 多线路加载立绘 */
 export function CharacterCard({ char, index, isFav, onOpen, onToggleFav, onHover, priority }) {
@@ -152,7 +153,9 @@ export default function Results({
             {SORTS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
           </select>
           <button className="btn small" id="btn-export" type="button" onClick={onExport}>导出 CSV</button>
-          <button className="btn small" id="btn-share" type="button" onClick={onShare}>分享</button>
+          {CLEAN_BUILD ? null : (
+            <button className="btn small" id="btn-share" type="button" onClick={onShare}>分享</button>
+          )}
         </div>
       </div>
 

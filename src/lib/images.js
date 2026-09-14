@@ -10,6 +10,7 @@
    ============================================================ */
 
 import { CONFIG } from './config.js';
+import { LOCAL_IMAGES_ONLY } from './buildflags.js';
 import { flatPalette, hashColors, parsePalette, isCorsImage } from './palette.js';
 
 const MANIFEST = { loaded: false, images: {} };
@@ -86,6 +87,7 @@ export function routeChain(char, { size = 'thumb' } = {}) {
     const localUrl = typeof local === 'string' ? local : local?.[size] || local?.thumb;
     if (localUrl) push(localUrl, 'local');
   }
+  if (LOCAL_IMAGES_ONLY) return chain;      // 不发任何站外图片请求，直接用本地缓存或占位图
   push(primary, 'origin');
   alts.forEach((url, i) => push(url, i === 0 ? 'alternate' : `alternate+${i}`));
   [primary, ...alts].forEach((url) => mirrorsOf(url || '').forEach((m) => push(m, 'mirror')));

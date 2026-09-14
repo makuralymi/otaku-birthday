@@ -6,6 +6,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { daysInMonth, monthName } from '../lib/data.js';
 import { flatPalette, parsePalette, hashColors } from '../lib/palette.js';
+import { placeholderURI } from '../lib/images.js';
+import { LOCAL_IMAGES_ONLY } from '../lib/buildflags.js';
 
 /** 色板条：5 个纯色方块，跟随当前角色/当天主色 */
 export function PaletteBlocks({ palette, height = 10, className = '' }) {
@@ -131,7 +133,14 @@ function Gallery({ featured, onPick }) {
           onClick={() => onPick(f.m, f.d)}
           title={`${f.m}/${f.d} ${f.n}`}
         >
-          <img src={f.img} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+          <img
+            src={LOCAL_IMAGES_ONLY ? placeholderURI({ id: f.id, palette: f.p, nameCn: f.n }) : f.img}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+          />
           <span className="gallery-bar" />
           <span className="gallery-name">{f.n}</span>
         </button>
