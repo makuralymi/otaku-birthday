@@ -65,31 +65,6 @@ export function About({ meta }) {
         </article>
 
         <article>
-          <h3>立绘是怎么取色的</h3>
-          <p>
-            页面会在浏览器里对每张立绘的上半身做一次 k-means 取色，把主色整理成一组
-            <b>纯色</b>：一张卡片底色、5 个色块、一个强调色 —— 全站不使用渐变，
-            所有颜色都是可以直接铺满的实色，所以每个人的生日页面配色都不一样。
-          </p>
-          <p className="fine">
-            取色回退链：内存缓存 → 本地缓存 → 实时 canvas 取色 → 数据集预计算色板 → 名字哈希生成。
-          </p>
-        </article>
-
-        <article>
-          <h3>立绘是怎么调取的</h3>
-          <p>每条立绘都有多条线路，前一条失败自动换下一条，直到本地生成的纯色占位图：</p>
-          <ol className="route-list">
-            <li>本地图缓存（跑过 <code>cache_images.py</code> 才启用，离线也能看）</li>
-            <li>原站 CDN（AniList / Bangumi / VNDB 直连）</li>
-            <li>跨站备用：另一数据库里同一角色的立绘</li>
-            <li>同内容镜像域名（如 VNDB 的 t. ↔ s.）</li>
-            <li>第三方图片代理（可跨域、可缩放，仅在前面的线路都失败时使用）</li>
-            <li>本地纯色占位图（永不失败）</li>
-          </ol>
-        </article>
-
-        <article>
           <h3>自己更新数据</h3>
           <pre><code>{`python3 scripts/fetch_anilist.py
 python3 scripts/fetch_vndb.py

@@ -340,6 +340,14 @@ check('预览项仍可跳转到生日页', (() => {
   return /\d+\/\d+/.test(label);
 })(), $$('#gallery .gallery-item')[0]?.getAttribute('title'));
 
+/* ── 10.97 关于区只保留「数据来源 / 自己更新数据」 ───── */
+const aboutText = $('#about')?.textContent || '';
+check('关于区只保留两个区块', $$('#about .about-grid article').length === 2,
+  `${$$('#about .about-grid article').length} 个`);
+check('已移除「立绘是怎么取色的」', !aboutText.includes('立绘是怎么取色的'));
+check('已移除「立绘是怎么调取的」', !aboutText.includes('立绘是怎么调取的'));
+check('保留数据来源署名', aboutText.includes('数据来源') && aboutText.includes('AniList'));
+
 /* ── 11. 无 JS 报错 ────────────────────────────────── */
 const realErrors = errors.filter((e) => !/navigation to another Document|Not implemented/.test(e));
 check('无 JS 运行错误', realErrors.length === 0, realErrors.slice(0, 2).join(' | ').slice(0, 160));
