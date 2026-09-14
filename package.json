@@ -4,6 +4,23 @@
   "version": "1.0.0",
   "type": "module",
   "description": "生诞绘卷 · 二次元角色生日查询（React + 莫奈取色 · 纯色简约风）",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/makuralymi/otaku-birthday.git"
+  },
+  "homepage": "https://github.com/makuralymi/otaku-birthday#readme",
+  "keywords": [
+    "anime",
+    "birthday",
+    "visual-novel",
+    "galgame",
+    "react",
+    "vite",
+    "csv",
+    "color-extraction",
+    "monet-palette",
+    "flat-design"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
