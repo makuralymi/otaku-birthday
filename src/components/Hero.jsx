@@ -201,7 +201,10 @@ export default function Hero({ meta, month, day, palette, onChange, onPickFeatur
     <section className="hero">
       <div className="hero-main">
         <p className="hero-eyebrow">{monthName(month)} · {day} 日生诞祭</p>
-        <h1 className="hero-title" id="hero-title">你的生日里，住着哪些角色？</h1>
+        <h1 className="hero-title" id="hero-title">
+          {/* inline span：开屏动画要按「文字实际边界」对齐，块级元素的矩形是整行宽度，对不准 */}
+          <span id="hero-title-text">你的生日里，住着哪些角色？</span>
+        </h1>
         <p className="hero-lede">
           收录动画、漫画、轻小说、二次元游戏与 GalGame 角色的官方生日设定。<br />
           选一个月日，看看与你同一天出生的人都是谁。
