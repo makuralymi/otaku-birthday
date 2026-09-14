@@ -1,0 +1,7 @@
+* text=auto eol=lf
+
+# 数据集是脚本生成的：体积大、逐行 diff 没意义
+# -text：按原样存储（Python csv 写的是 CRLF），不做换行转换，避免每次重建整文件 diff
+public/data/*.csv        -text -diff linguist-generated=true
+public/data/months/*.csv -text -diff linguist-generated=true
+raw/*.jsonl              -text -diff linguist-generated=true

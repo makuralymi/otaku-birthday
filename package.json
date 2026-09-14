@@ -1,0 +1,23 @@
+{
+  "name": "otaku-birthday",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "生诞绘卷 · 二次元角色生日查询（React + 莫奈取色 · 纯色简约风）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "test": "node tools/make-test-bundle.mjs && node tools/site-test.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.0",
+    "esbuild": "^0.25.0",
+    "jsdom": "^27.0.0",
+    "vite": "^7.2.0"
+  }
+}

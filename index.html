@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生诞绘卷 · 和谁同一天生日？二次元角色生日查询</title>
+<meta name="description" content="输入你的生日，立刻看到同一天出生的动漫、轻小说、二次元游戏、Galgame 角色。立绘实时取色成一组纯色，页面主色随角色变化；支持类型筛选、收藏与 CSV 导出。数据来自 AniList / Bangumi / VNDB。">
+<meta name="theme-color" content="#f2f0ec">
+<meta property="og:title" content="生诞绘卷 · 二次元角色生日查询">
+<meta property="og:description" content="输入生日，看看有哪些动漫 / 轻小说 / Galgame 角色与你同日出生。">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23f2f0ec'/><rect x='6' y='6' width='20' height='20' rx='4' fill='%2347597a'/><rect x='10' y='10' width='12' height='5' fill='%23ffffff'/></svg>">
+
+<!-- 立绘多线路：主线路预连接，兜底线路按需建立 -->
+<link rel="preconnect" href="https://s4.anilist.co" crossorigin>
+<link rel="preconnect" href="https://lain.bgm.tv" crossorigin>
+<link rel="preconnect" href="https://t.vndb.org" crossorigin>
+<link rel="dns-prefetch" href="//s.vndb.org">
+<link rel="dns-prefetch" href="//i0.wp.com">
+<link rel="dns-prefetch" href="//wsrv.nl">
+</head>
+<body>
+<div id="root"></div>
+<noscript>本站需要 JavaScript 才能渲染生日查询结果。</noscript>
+<script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
