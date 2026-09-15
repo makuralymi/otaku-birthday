@@ -1,7 +1,10 @@
 /* ============================================================
    Intro.jsx · 开屏动画
    流程：居中浮出「日期 + 站点标题」→ 停留 1 秒 → 上移并缩放，
-   **按文字实际边界**精确落到主页面标题的位置 → 交叉淡入（无缝）→ 其余内容依次渐显。
+   **按文字实际边界**精确落到主页面标题的位置 → 开屏背景层渐隐、标题硬切换 → 其余内容依次渐显。
+
+   标题文字全程 opacity:1，**不参与任何淡入淡出**：
+   位置对齐后，开屏图层移除与主页面标题点亮发生在同一帧，视觉上文字一直在那儿。
 
    对齐做法：两边都把标题文字包在 inline span 里量 rect（inline 元素的矩形就是文字边界），
    再用 transform-origin: top left + translate + scale 把开屏文字映射到主页面文字上，
@@ -16,6 +19,8 @@ const MOVE_MS = 700;     // 上移归位
 const FADE_MS = 240;     // 与主页面交叉淡入
 
 export const INTRO_DONE_CLASS = 'page-ready';
+// 交接那一刻才加：主页面标题此刻**瞬时**显示（不做淡入），与开屏文字像素级重合后完成交换
+export const INTRO_HANDOFF_CLASS = 'intro-handoff';
 
 export default function Intro({ month, day, onDone }) {
   const [phase, setPhase] = useState('init');   // init → rise → hold → move → fade → gone
@@ -27,7 +32,7 @@ export default function Intro({ month, day, onDone }) {
 
   useEffect(() => {
     if (reduce) {
-      document.body.classList.add(INTRO_DONE_CLASS);
+      document.body.classList.add(INTRO_DONE_CLASS, INTRO_HANDOFF_CLASS);
       onDone?.();
       setPhase('gone');
       return undefined;
@@ -45,9 +50,18 @@ export default function Intro({ month, day, onDone }) {
         document.body.classList.add(INTRO_DONE_CLASS);
         onDone?.();
       }, 30 + RISE_MS + HOLD_MS + MOVE_MS),
-      setTimeout(() => setPhase('gone'), 30 + RISE_MS + HOLD_MS + MOVE_MS + FADE_MS),
+      setTimeout(() => {
+        // 开屏图层移除的同一帧把主页面标题点亮：两段文字位置/字号完全一致，
+        // 所以这一步是「无缝硬切换」，中间不存在任何淡入淡出
+        document.body.classList.add(INTRO_HANDOFF_CLASS);
+        setPhase('gone');
+      }, 30 + RISE_MS + HOLD_MS + MOVE_MS + FADE_MS),
     ];
-    return () => timers.forEach(clearTimeout);
+    return () => {
+      timers.forEach(clearTimeout);
+      // 兜底：万一中途异常，别让页面卡在「锁定滚动 / 内容不显示」的状态
+      document.body.classList.remove('intro-lock', 'intro-pending');
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce]);
 
@@ -88,6 +102,8 @@ export default function Intro({ month, day, onDone }) {
 
   return (
     <div className={`intro intro-${phase}${ready ? ' intro-go' : ''}`} id="intro" aria-hidden="true">
+      {/* 只有这一层负责渐隐：页面其余内容随它浮现；标题文字在它之上，永不淡 */}
+      <div className="intro-bg" />
       <div className="intro-box">
         <div className="intro-item" ref={itemRef}>
           <p className="intro-date" id="intro-date">{month} 月 {day} 日</p>

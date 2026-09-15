@@ -134,6 +134,28 @@ check('阻尼在减少动效/触摸设备上自动跳过',
 check('阻尼有 maxLag 限幅与归位阈值',
   /MAX_LAG\s*=\s*\d+/.test(dampSrc) && /SETTLE\s*=/.test(dampSrc), '限幅 + settle');
 
+/* 开屏标题「不淡入淡出」：背景层与文字层分层，交接为同位置硬切换 */
+const introSrc = fs.readFileSync(path.join(ROOT, 'src/components/Intro.jsx'), 'utf8');
+check('开屏背景与文字分层（只有背景层渐隐）',
+  /className="intro-bg"/.test(introSrc)
+  && /\.intro-bg\s*\{[^}]*transition:\s*opacity/.test(cssSrc)
+  && /\.intro\.intro-fade \.intro-bg\s*\{/.test(cssSrc)
+  && !/\.intro\.intro-fade\s*\{[^}]*opacity/.test(cssSrc),
+  /className="intro-bg"/.test(introSrc) ? '背景层存在且只它渐隐' : '缺少 .intro-bg 元素');
+check('开屏标题文字不含任何透明度过渡',
+  !/\.intro-title-text\s*\{[^}]*opacity/.test(cssSrc)
+  && /\.intro:not\(\.intro-init\) \.intro-item \{ transform: translate3d\(0, 0, 0\); \}/.test(cssSrc),
+  '标题只位移缩放，位姿保持到结束');
+check('主页面标题硬切换（零过渡，交接帧才点亮）',
+  /body:not\(\.intro-handoff\) \.hero-title\s*\{\s*opacity: 0/.test(cssSrc)
+  && /body\.intro-handoff \.hero-title\s*\{\s*opacity: 1/.test(cssSrc)
+  && !/\.hero-title[^{]*\{[^}]*transition:[^}]*opacity/.test(cssSrc),
+  'body:not(.intro-handoff) → 0 / body.intro-handoff → 1');
+check('开屏组件在交接帧加 intro-handoff 类',
+  /INTRO_HANDOFF_CLASS = 'intro-handoff'/.test(introSrc)
+  && /classList\.add\(INTRO_HANDOFF_CLASS\)/.test(introSrc),
+  '交接帧 classList.add(INTRO_HANDOFF_CLASS)');
+
 /* ── 1. 首屏与数据 ─────────────────────────────────── */
 check('meta 统计渲染', $('#stat-total')?.textContent !== '—' && /^\d/.test($('#stat-total')?.textContent || ''), $('#stat-total')?.textContent);
 check('月份下拉 12 项', $$('#sel-month option').length === 12, `${$$('#sel-month option').length}`);

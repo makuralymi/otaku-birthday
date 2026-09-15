@@ -490,26 +490,40 @@ section.results, section.calendar-section, section.about {
    ============================================================ */
 body.intro-lock { overflow: hidden; }
 
+/* 背景层与文字层分开：
+     · .intro-bg 只负责「遮住页面 → 渐隐」，页面其余内容随它逐层浮现；
+     · 标题文字全程 opacity:1，不参与任何淡入淡出 —— 交接时与主页面标题
+       同位置同字号**硬切换**，所以看不出接缝、也不会「淡一下」。 */
 .intro {
   position: fixed;
   inset: 0;
   z-index: 200;
   display: grid;
   place-items: center;
+}
+.intro-bg {
+  position: absolute;
+  inset: 0;
   background: var(--paper);
   transition: opacity .24s linear;
 }
-.intro.intro-fade { opacity: 0; pointer-events: none; }
+.intro.intro-fade .intro-bg { opacity: 0; }
+.intro.intro-fade { pointer-events: none; }
 
-.intro-box { width: min(880px, 88vw); text-align: center; }
+.intro-box { position: relative; z-index: 1; width: min(880px, 88vw); text-align: center; }
 .intro-item {
-  opacity: 0;
   transform: translate3d(0, 26px, 0);
-  transition: opacity .6s var(--ease);
-  will-change: transform, opacity;
+  transition: transform .6s var(--ease);
+  will-change: transform;
 }
-.intro-rise .intro-item,
-.intro-hold .intro-item { opacity: 1; transform: translate3d(0, 0, 0); }
+/* 浮起后的位姿要一直保持到开屏结束：若只在 rise/hold 阶段生效，
+   进入 move 时基础规则的 +26px 会「带过渡地」回来，交接处就偏 26px */
+.intro:not(.intro-init) .intro-item { transform: translate3d(0, 0, 0); }
+
+/* 日期与短横可以淡；标题文字（.intro-title-text）永不淡 */
+.intro-date, .intro-bar { opacity: 0; transition: opacity .28s var(--ease); }
+.intro-rise .intro-date, .intro-hold .intro-date,
+.intro-rise .intro-bar, .intro-hold .intro-bar { opacity: 1; }
 
 /* 归位：只让「标题文字」这一段位移+缩放（top-left 为原点，保证与主页面文字重合） */
 .intro-title-text {
@@ -524,9 +538,8 @@ body.intro-lock { overflow: hidden; }
   transform: translate3d(var(--intro-dx, 0), var(--intro-dy, 0), 0) scale(var(--intro-scale, 1));
 }
 /* 日期与短横在归位时先淡掉，只留标题飞过去 */
-.intro-date, .intro-bar { transition: opacity .28s var(--ease); }
-.intro-move .intro-date,
-.intro-move .intro-bar { opacity: 0; }
+.intro-move .intro-date, .intro-move .intro-bar,
+.intro-fade .intro-date, .intro-fade .intro-bar { opacity: 0; }
 
 /* 未就绪前主页面内容先隐藏，等开屏归位后按顺序渐显 */
 /* 未就绪：内容淡出并下移 16px……但**标题不能位移**。
@@ -553,7 +566,10 @@ body.intro-pending:not(.page-ready) section.about {
   transform: translateY(16px);
 }
 /* 标题交接最快（与开屏交叉淡入对齐），其余按顺序渐显 */
-body.page-ready .hero-title { transition: opacity .2s linear; }   /* 只淡入，不位移：与开屏文字重叠交接 */
+/* 主页面标题**不淡入**：交接前保持不可见，交接那一帧瞬时置为可见。
+   此时开屏文字与它像素级重合、开屏图层整体移除，视觉上文字「一直在那儿」。 */
+body:not(.intro-handoff) .hero-title { opacity: 0; }
+body.intro-handoff .hero-title { opacity: 1; }
 body.page-ready .hero-lede { transition: opacity .5s var(--ease) .14s, transform .5s var(--ease) .14s; }
 body.page-ready .picker { transition: opacity .55s var(--ease) .22s, transform .55s var(--ease) .22s; }
 body.page-ready .gallery-block { transition: opacity .55s var(--ease) .32s, transform .55s var(--ease) .32s; }
@@ -564,7 +580,6 @@ body.page-ready section.calendar-section,
 body.page-ready section.about { transition: opacity .7s var(--ease) .44s, transform .7s var(--ease) .44s; }
 body.page-ready .topbar,
 body.page-ready .colorband,
-body.page-ready .hero-title,
 body.page-ready .hero-lede,
 body.page-ready .picker,
 body.page-ready .gallery-block,
@@ -581,5 +596,6 @@ body.page-ready .gallery-item:nth-child(3n) { animation-delay: .48s; }
 
 @media (prefers-reduced-motion: reduce) {
   .intro { display: none; }
+  body .hero-title { opacity: 1; }
   .card { opacity: 1; transform: none; }
 }

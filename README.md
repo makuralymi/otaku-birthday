@@ -35,7 +35,7 @@ npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
 npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：85 项断言
+npm test             # jsdom 自测：89 项断言
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -59,8 +59,8 @@ npm test             # jsdom 自测：85 项断言
 自测覆盖两种模式：
 
 ```bash
-npm test            # 常规档：85 项
-CLEAN=1 npm test    # 干净档：83 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm test            # 常规档：89 项
+CLEAN=1 npm test    # 干净档：87 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
 ```
 
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
@@ -259,10 +259,10 @@ npx esbuild src/main.jsx --bundle --format=iife --jsx=automatic \
 node tools/site-test.mjs
 ```
 
-85 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
+89 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
 搜索空态、排序、详情抽屉（色板 / 作品 / 来源链接）、收藏写入 localStorage、导出 CSV、分享、
 日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、
-**开屏交接受回归保护（淡出阶段必须继续匹配归位 transform，否则文字会在淡出时漂回中心）**、
+**开屏交接受回归保护（淡出阶段必须继续匹配归位 transform；开屏背景与文字分层、标题文字零透明度过渡、主页面标题为交接帧硬切换）**、
 **滚动方案受回归保护（不得出现 wheel 劫持与 preventDefault、必须有 maxLag 限幅与归位阈值、减少动效/触摸设备自动跳过）**、
 **`.page` 容器边界（顶栏 / 开屏 / 抽屉等 fixed 元素必须在容器外，避免被阻尼 transform 污染）**、
 **抽屉面板带 `data-native-scroll` 原生滚动标记**、无 JS 报错。
@@ -273,7 +273,13 @@ node tools/site-test.mjs
 
 ### 开屏动画 → 主页面（无缝交接）
 
-流程：居中浮出「日期 + 标题」→ 停留 1s → 上移缩放到主页面标题位置 → 交叉淡入 → 其余内容依次渐显。
+流程：居中浮出「日期 + 标题」→ 停留 1s → 上移缩放到主页面标题位置 → 开屏背景层渐隐 → 其余内容依次渐显。
+
+**标题文字（「你的生日里，住着哪些角色？」）全程 `opacity: 1`，不参与任何淡入淡出**：
+`.intro` 分成两层 —— `.intro-bg` 只负责「遮住页面 → 渐隐」（页面其余内容随它逐层浮现），
+标题文字在它之上，只位移/缩放；对齐后用 `body.intro-handoff` 在同一帧把开屏图层移除、把主页面
+标题点亮（`body:not(.intro-handoff) .hero-title{opacity:0}` → `body.intro-handoff .hero-title{opacity:1}`，
+两边都没有 transition），因为两段文字位置/字号/颜色完全一致，这一步是「无缝硬切换」，中间不存在淡入淡出。
 
 关键点：
 
@@ -295,6 +301,11 @@ node tools/site-test.mjs
 | 淡出期间文字宽度差 | **0.0px** |
 | 开屏与主标题「同时半透明」帧数 | **10 帧**（交叉淡入无缝） |
 | 开屏元素自动移除 / `body.page-ready` | ✓ / ✓ |
+| 开屏标题文字 opacity（151 帧采样） | **恒为 1.000**（无淡入） |
+| 主页面标题处于中间透明度的帧数 | **0 帧**（硬切换，无淡出/淡入） |
+| 标题可见性断档帧数 | **0 帧**（交接无空档） |
+| 背景层 `.intro-bg` 渐隐中间帧 | 12 帧（其余内容仍逐层浮现） |
+| 交接两端样式 | `rgb(25,24,32)` / w600 / Songti SC，缩放后 **46.0px = 主页面 46.0px** |
 
 ### 滚动：原生滚动 + 视觉阻尼
 
