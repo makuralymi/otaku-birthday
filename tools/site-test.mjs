@@ -98,10 +98,41 @@ const introText = $('#intro')?.textContent || '';
 check('开屏内容含日期与标题', /\d+ 月 \d+ 日/.test(introText) && introText.includes('你的生日里，住着哪些角色？'),
   introText.trim().slice(0, 40));
 check('开屏期间主内容未就绪', !window.document.body.classList.contains('page-ready'));
+check('开屏与顶栏都在阻尼容器 .page 之外', !!$('.page') && !$('.page #intro') && !$('.page .topbar'),
+  `intro 在 page 内=${!!$('.page #intro')} topbar 在 page 内=${!!$('.page .topbar')}`);
 await until(() => !$('#intro'), 8000);
 check('开屏动画结束后自动移除', !$('#intro'));
 check('主页面进入就绪态（内容渐显）', window.document.body.classList.contains('page-ready'));
 check('卡片已加浮出类', $$('.card.is-in').length > 0, `${$$('.card.is-in').length} 张`);
+
+/* ── 0.1 开屏→主页面交接 & 滚动方案（源码级回归）─────────
+   这两点都是真实浏览器里踩过的坑，jsdom 测不到动效，所以直接锁住源码形态：
+     · 开屏 fade 阶段必须继续匹配归位 transform，否则文字会在淡出的 240ms 里
+       反向滑回中心（交接「漂一下」）
+     · 滚动只允许「原生滚动 + 视觉阻尼」，不允许再回到劫持 wheel 的方案
+       （会破坏触控板惯性、键盘与抽屉内部滚动） */
+const cssSrc = fs.readFileSync(path.join(ROOT, 'src/styles.css'), 'utf8');
+check('开屏淡出阶段保留归位 transform（防淡出时漂回中心）',
+  /\.intro-fade\.intro-go\s+\.intro-title-text/.test(cssSrc)
+  && /\.intro-move\.intro-go\s+\.intro-title-text/.test(cssSrc),
+  /\.intro-fade\.intro-go \.intro-title-text/.test(cssSrc) ? 'move/fade 两阶段都命中' : '缺少 fade 阶段选择器');
+check('主内容包在 .page 容器内（阻尼只作用这一层）',
+  !!$('.page main') && !!$('.page .colorband') && !!$('.page footer') && (CLEAN || !!$('.page .repo-link')),
+  `page 内 main=${!!$('.page main')} colorband=${!!$('.page .colorband')} footer=${!!$('.page footer')}`);
+check('常驻 fixed 元素（顶栏）在 .page 外',
+  !!$('.topbar') && !$('.page .topbar'), `topbar 在 page 内=${!!$('.page .topbar')}`);
+const libDir = path.join(ROOT, 'src/lib');
+const dampSrc = fs.readFileSync(path.join(libDir, 'scrollDamping.js'), 'utf8');
+const dampCode = dampSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+check('滚动=原生+视觉阻尼，不再劫持滚轮',
+  !fs.existsSync(path.join(libDir, 'smoothScroll.js'))
+  && !/addEventListener\(\s*'wheel'/.test(dampCode) && !/preventDefault/.test(dampCode),
+  fs.existsSync(path.join(libDir, 'smoothScroll.js')) ? 'smoothScroll.js 仍存在'
+    : (/preventDefault/.test(dampCode) ? '代码里仍有 preventDefault' : '无 wheel 劫持 / 无 preventDefault'));
+check('阻尼在减少动效/触摸设备上自动跳过',
+  /prefers-reduced-motion/.test(dampSrc) && /pointer: coarse/.test(dampSrc), 'reduced-motion + coarse');
+check('阻尼有 maxLag 限幅与归位阈值',
+  /MAX_LAG\s*=\s*\d+/.test(dampSrc) && /SETTLE\s*=/.test(dampSrc), '限幅 + settle');
 
 /* ── 1. 首屏与数据 ─────────────────────────────────── */
 check('meta 统计渲染', $('#stat-total')?.textContent !== '—' && /^\d/.test($('#stat-total')?.textContent || ''), $('#stat-total')?.textContent);
@@ -153,6 +184,9 @@ check('抽屉含色板色块', $$('#drawer-body .swatch').length >= 3, `${$$('#d
 check('抽屉含莫奈取色标题', ($('#drawer-body')?.textContent || '').includes('莫奈取色'));
 if (!CLEAN) check('抽屉含来源链接', $$('#drawer-body .link-row a').length >= 3, `${$$('#drawer-body .link-row a').length} 个`);
 check('抽屉含作品列表', $$('#drawer-body .work-list li').length >= 1);
+check('抽屉面板标记为原生滚动区（不被阻尼/劫持影响）',
+  $$('.drawer-panel').every((el) => el.getAttribute('data-native-scroll') === '1'),
+  `${$$('.drawer-panel').length} 个面板`);
 const swatch = $('#drawer-body .swatch');
 swatch.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await until(() => ($('#toast')?.textContent || '').length > 0);

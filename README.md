@@ -35,7 +35,7 @@ npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
 npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：54 项断言
+npm test             # jsdom 自测：85 项断言
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -59,8 +59,8 @@ npm test             # jsdom 自测：54 项断言
 自测覆盖两种模式：
 
 ```bash
-npm test            # 常规档：63 项
-CLEAN=1 npm test    # 干净档：61 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm test            # 常规档：85 项
+CLEAN=1 npm test    # 干净档：83 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
 ```
 
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
@@ -259,9 +259,76 @@ npx esbuild src/main.jsx --bundle --format=iife --jsx=automatic \
 node tools/site-test.mjs
 ```
 
-54 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
+85 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
 搜索空态、排序、详情抽屉（色板 / 作品 / 来源链接）、收藏写入 localStorage、导出 CSV、分享、
-日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、无 JS 报错。
+日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、
+**开屏交接受回归保护（淡出阶段必须继续匹配归位 transform，否则文字会在淡出时漂回中心）**、
+**滚动方案受回归保护（不得出现 wheel 劫持与 preventDefault、必须有 maxLag 限幅与归位阈值、减少动效/触摸设备自动跳过）**、
+**`.page` 容器边界（顶栏 / 开屏 / 抽屉等 fixed 元素必须在容器外，避免被阻尼 transform 污染）**、
+**抽屉面板带 `data-native-scroll` 原生滚动标记**、无 JS 报错。
+
+动效本身（对位误差、交叉淡入、阻尼曲线）在无头 Firefox 里用真实浏览器探针回归，见下节。
+
+## 动效与滚动（实现取舍）
+
+### 开屏动画 → 主页面（无缝交接）
+
+流程：居中浮出「日期 + 标题」→ 停留 1s → 上移缩放到主页面标题位置 → 交叉淡入 → 其余内容依次渐显。
+
+关键点：
+
+- 两边都把标题文字包在 `inline-block` span 里量 `getBoundingClientRect()`（inline 块的矩形就是文字边界），
+  开屏用 `transform-origin: top left` + `translate3d(dx,dy) scale(to.width/from.width)` 精确映射到主标题上；
+- **缩放比按文字宽度算**，不能按高度（开屏行高来自 body 的 1.65，主标题是 1.18，高度比会算错）；
+- 垂直方向对齐**中心线**，让行高差异被半行距对称吸收；
+- `.hero-title` 在未就绪态**只淡出不位移**：早前它带 `translateY(16px)`，导致量到的目标位置偏 16px，交接时回弹；
+- 归位 transform 必须**同时匹配 `intro-move` 与 `intro-fade`**：只在 move 阶段生效的话，进入淡出的瞬间规则失效，
+  文字会在 240ms 淡出里反向滑回中心（实测偏移 16.6px / 6.5px，就是「过渡不无缝」的根因）；
+- 其余内容（lede / picker / 色带 / gallery / 结果区 …）由 `body.page-ready` 触发，按 0.14s → 0.36s 的延迟依次渐显。
+
+无头 Firefox 探针实测（1280×820，iframe 内真实渲染）：
+
+| 指标 | 结果 |
+| --- | --- |
+| 淡出期间文字左边缘偏差 dx | **0.0px**（共 8 帧采样） |
+| 淡出期间中心线偏差 dy | **0.0px** |
+| 淡出期间文字宽度差 | **0.0px** |
+| 开屏与主标题「同时半透明」帧数 | **10 帧**（交叉淡入无缝） |
+| 开屏元素自动移除 / `body.page-ready` | ✓ / ✓ |
+
+### 滚动：原生滚动 + 视觉阻尼
+
+上一版试过「劫持滚轮 + 自己插值滚动」，体验很差：触控板惯性、键盘、滚动条跳转全被改写，抽屉内部滚动也被一起拦掉，已删除。
+
+现在（`src/lib/scrollDamping.js`）**完全不碰原生滚动**：
+
+- 浏览器照常滚（滚动条、滚轮、触控板惯性、键盘、锚点全是原生行为）；
+- 只给内容容器 `.page` 加一层视觉滞后：`smooth` 以 `lerp=0.14` 追 `window.scrollY`，
+  差值 `lag` 作为 `translate3d(0, lag, 0)` 施加到 `.page` → 观感是阻尼 + 平滑过渡，停下时还会滑一小段（一点惯性）；
+- `MAX_LAG=120px` 限幅，防止快速滚动时内容脱节；`|lag|<0.3px` 直接归位并清空 transform（不留常驻合成层）；
+- `prefers-reduced-motion: reduce` 或触摸为主的设备整段跳过；
+- transform 只作用 `.page`，而 `.page` **不含**任何 `position: fixed` 元素（顶栏 / 开屏 / 抽屉 / Toast 都在容器外），
+  所以 fixed 定位不会被 transform 变成包含块；抽屉面板另加 `data-native-scroll="1"` 与 `overscroll-behavior: contain`。
+
+无头 Firefox 探针实测：
+
+| 场景 | 结果 |
+| --- | --- |
+| 滚到 300px 后 `scrollY` | 300（原生滚动未被劫持） |
+| 普通滚动最大滞后 | 103.2px（有阻尼感） |
+| 大跳转（0 → 2600px）最大滞后 | **120.0px**（被限幅） |
+| 停止后 | lag → 0.61 → transform 清空 |
+| 抽屉内 wheel `defaultPrevented` | false（未被拦截） |
+| 抽屉内滚动是否带动页面 | Δpage = 0.0px |
+| 抽屉面板 overscroll-behavior | contain |
+
+### 三种构建都验证过
+
+- `dist/`：常规档，`npm test` **85/85**；
+- `dist-clean/`：无外链无分享档，`CLEAN=1 npm test` **83/83**；
+- `dist-clean-offline/`：真实浏览器里全程操作（滚动 + 换一批 + 开抽屉）后
+  `performance.getEntriesByType('resource')` 只有 **5 个同源请求、0 个外部请求**，182 张 `<img>` 无一个站外 src、
+  0 张裂图，页面无任何站外 `<a href>`，同时仍保留 AniList / Bangumi 文字署名。
 
 ## 常见问题
 
