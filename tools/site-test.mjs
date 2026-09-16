@@ -163,6 +163,15 @@ check('键盘 / 滚动条 / 锚点等外部滚动会同步（不与动画打架�
 check('中部为临界阻尼跟随（ζ=1：只追平、不过冲 → 不回弹）',
   /a = cfg\.omega \* cfg\.omega \* \(target - cur\) - 2 \* cfg\.omega \* vCur/.test(dampCode),
   'a = ω²(target−cur) − 2ω·vCur');
+const omegaVal = Number((dampSrc.match(/const OMEGA = ([\d.]+)/) || [])[1]);
+const lineVal = Number((dampSrc.match(/const LINE_PX = ([\d.]+)/) || [])[1]);
+check('跟随足够柔（OMEGA 12~30：一格有明显滑行，不是瞬移）',
+  omegaVal >= 12 && omegaVal <= 30, `OMEGA=${omegaVal}`);
+check('Firefox 行模式归一化（LINE_PX ≥ 32 → 一格约 120px）',
+  lineVal >= 32, `LINE_PX=${lineVal}（3 行 × ${lineVal} = ${lineVal * 3}px）`);
+check('高速连滚有滞后上限（不会越拖越远）',
+  /MAX_LAG\s*=\s*\d+/.test(dampSrc) && /cfg\.maxLag/.test(dampCode),
+  (dampSrc.match(/const MAX_LAG = (\d+)/) || [])[1] + 'px');
 check('回弹只存在于越界（橡皮筋：有上限、松手才弹）',
   /MAX_RUBBER\s*=\s*\d+/.test(dampSrc) && /RUBBER_ZETA\s*=/.test(dampSrc)
   && /RELEASE_MS\s*=/.test(dampSrc) && /const beyond = raw - target/.test(dampCode),

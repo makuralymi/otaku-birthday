@@ -4,8 +4,14 @@
    想要的效果（按需求）：
 
      ① 主页面滚动要「无级」 —— 滚轮/触控板的每一格输入不是让页面瞬移，
-        而是被接过来、平滑成一段连续滑动（约 1~3 帧内起步、~60ms 内贴合），
+        而是被接过来、平滑成一段连续滑动：从静止起步（初始速度为 0，无突跳）
+        → 加速 → 柔和减速贴合，一格约 300ms 滑完；连续几格会自然叠成一段长滑行，
         所以看起来是顺滑的连续滚动，而不是一格一格跳。
+
+        手感由两个数决定：
+          · OMEGA 决定「黏度/惯性滑行时长」—— 20 偏柔（一格 ~300ms），35+ 会明显变干脆；
+          · 临界阻尼 ζ=1：追平就停，不会冲过头（中部不回弹就靠这个）；
+          · MAX_LAG 是高速连滚时的落后上限，避免快速连滚越拖越远。
 
      ② 平时**不回弹** —— 页面中部的跟随用「临界阻尼」系统（ζ=1，绝不过冲），
         停手就稳稳停在目标位置，不回弹、不晃动、不残留位移。
@@ -24,9 +30,12 @@
      · 触摸为主或开启「减少动效」→ 整段不接管，保持原生滚动。
    ============================================================ */
 
-const OMEGA = 48;          // 平滑跟随角频率：越大越跟手（临界阻尼 ζ=1，不会过冲）
+const OMEGA = 20;          // 跟随角频率（rad/s）：越小越「黏」、惯性滑行越久；20 ≈ 一格滑 300ms
+                           // 临界阻尼 ζ=1（见下面的 2ω·vCur）：有惯性、不回弹、不过冲
+const MAX_LAG = 150;       // 高速连滚时的滞后上限（px）：超过就把内容往前带，避免越拖越远
 const SETTLE_PX = 0.4;     // 与目标差小于该值且速度接近 0 → 贴合、停机
-const LINE_PX = 16;        // deltaMode=1（按行）换算
+const LINE_PX = 40;        // deltaMode=1（按行）换算：Firefox 一格 = 3 行 → 约 120px，
+                           // 与 Chrome 的 ~100px/格 对齐（否则 Firefox 一格只走 48px，更像步进）
 const PAGE_RATIO = 0.9;    // deltaMode=2（按页）换算成视口高度比例
 const MAX_RUBBER = 132;    // 边缘最多拉扯多少 px
 const RUBBER_RESIST = 0.45;// 越界输入的阻尼（越小越硬）
@@ -45,7 +54,7 @@ export function enableScrollSmooth(getWrapper, tune = {}) {
     && ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0);
   if (touchPrimary) return () => {};
 
-  const cfg = { omega: OMEGA, maxRubber: MAX_RUBBER, resist: RUBBER_RESIST,
+  const cfg = { omega: OMEGA, maxLag: MAX_LAG, maxRubber: MAX_RUBBER, resist: RUBBER_RESIST,
     rubberOmega: RUBBER_OMEGA, rubberZeta: RUBBER_ZETA, releaseMs: RELEASE_MS, ...tune };
 
   const node = () => (typeof getWrapper === 'function' ? getWrapper() : getWrapper);
@@ -101,6 +110,14 @@ export function enableScrollSmooth(getWrapper, tune = {}) {
       const a = cfg.omega * cfg.omega * (target - cur) - 2 * cfg.omega * vCur;
       vCur += a * h;
       cur += vCur * h;
+    }
+    // 滞后上限：单格（≤120px）完全不受影响；快速连滚时最多落后 MAX_LAG，
+    // 既保留惯性手感，又不会「输入滚了 3 格、画面还差 2 格」
+    const lag = target - cur;
+    if (Math.abs(lag) > cfg.maxLag) {
+      cur = target - Math.sign(lag) * cfg.maxLag;
+      const vCap = cfg.omega * cfg.maxLag;
+      if (Math.abs(vCur) > vCap) vCur = Math.sign(vCur) * vCap;
     }
     if (Math.abs(target - cur) > 0.02) writeScroll(cur);
     else cur = target;
