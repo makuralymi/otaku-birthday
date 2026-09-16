@@ -33,14 +33,21 @@ export const SMOOTH_OPTIONS = {
   overscroll: true,
 };
 
-/* 边缘橡皮筋（只有到顶/到底才出现） */
+/* 边缘橡皮筋（只有到顶/到底才出现）
+   ------------------------------------------------------------
+   要点：必须和 Lenis 用同一套「滚轮增量归一化」，否则不同浏览器/设备
+   手感差一个量级（Firefox 一格是 deltaMode=1 / deltaY=3，原始值直接乘
+   系数的话一格只能拉动 1~2px，等于没有）。
+   Lenis 内部：LINE_HEIGHT = 100/6 ≈ 16.67px，deltaMode=1 乘它，=2 乘视口高度。 */
+const LINE_HEIGHT = 100 / 6;
+
 const BOUNCE = {
-  max: 132,        // 最多拉扯多少 px
-  resist: 0.45,    // 越界输入的阻尼
-  omega: 17,       // 回弹角频率
-  zeta: 0.42,      // 回弹阻尼比（<1 → 松手会弹一下）
-  releaseMs: 90,   // 最后一次滚轮之后多久开始回弹
-  activePx: 0.5,   // 位移小于它就归零（带滞回，避免逐帧加/删 transform 造成闪烁）
+  max: 170,        // 最多拉扯多少 px（渐进阻尼，越拉越紧）
+  resist: 0.32,    // 第一格的拉扯比例
+  omega: 11,       // 回弹角频率：比 Lenis 的 1.2s 滑行更慢一点，观感才连贯
+  zeta: 0.5,       // 阻尼比 <1 → 松手弹一下
+  releaseMs: 120,  // 最后一次滚轮之后多久开始回弹
+  activePx: 0.5,   // 小于它就归零（滞回，避免逐帧加删 transform 造成闪烁）
 };
 
 function createEdgeBounce(getWrapper, tune = {}) {
@@ -56,11 +63,19 @@ function createEdgeBounce(getWrapper, tune = {}) {
     }
     return false;
   };
+  // 与 Lenis 完全一致的归一化
+  const normDelta = (e) => {
+    let d = e.deltaY;
+    if (e.deltaMode === 1) d *= LINE_HEIGHT;
+    else if (e.deltaMode === 2) d *= window.innerHeight;
+    return d;
+  };
 
   let rubber = 0;
   let vel = 0;
   let raf = 0;
   let timer = 0;
+  let tPrev = 0;
   let releasing = true;
   let painted = false;
 
@@ -79,9 +94,10 @@ function createEdgeBounce(getWrapper, tune = {}) {
     }
   };
 
-  const step = () => {
+  const step = (now) => {
+    const dt = Math.min(1 / 30, Math.max(1 / 240, ((now - tPrev) / 1000) || 1 / 60));
+    tPrev = now;
     if (releasing) {
-      const dt = 1 / 60;
       const h = dt / 2;
       for (let i = 0; i < 2; i += 1) {
         const a = -cfg.omega * cfg.omega * rubber - 2 * cfg.zeta * cfg.omega * vel;
@@ -95,21 +111,28 @@ function createEdgeBounce(getWrapper, tune = {}) {
     raf = requestAnimationFrame(step);
   };
 
-  const start = () => { if (!raf) raf = requestAnimationFrame(step); };
+  const start = () => {
+    if (raf) return;
+    tPrev = performance.now();
+    raf = requestAnimationFrame(step);
+  };
 
   const onWheel = (e) => {
     if (e.ctrlKey || e.metaKey || !e.deltaY) return;
     if (insidePrevented(e.target)) return;                    // 内部滚动区不参与
     const y = window.scrollY;
     const max = maxScroll();
-    const pushingUp = e.deltaY < 0 && y <= 0.5;               // 顶部继续上滚
-    const pushingDown = e.deltaY > 0 && y >= max - 0.5;       // 底部继续下滚
+    const delta = normDelta(e);
+    const pushingUp = delta < 0 && y <= 0.5;                  // 顶部继续上滚
+    const pushingDown = delta > 0 && y >= max - 0.5;          // 底部继续下滚
     if (!pushingUp && !pushingDown) {
       if (!releasing && Math.abs(rubber) <= cfg.activePx) releasing = true;
       return;
     }
     releasing = false;
-    rubber = clamp(rubber + e.deltaY * cfg.resist, -cfg.max, cfg.max);
+    // 渐进阻尼：拉得越远，同样一格能拉动的越少（iOS 橡皮筋的手感）
+    const room = 1 - Math.min(1, Math.abs(rubber) / cfg.max);
+    rubber = clamp(rubber + delta * cfg.resist * room, -cfg.max, cfg.max);
     paint();
     start();
     clearTimeout(timer);

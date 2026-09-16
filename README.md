@@ -35,7 +35,7 @@ npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
 npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：118 项断言
+npm test             # jsdom 自测：120 项断言
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -59,8 +59,8 @@ npm test             # jsdom 自测：118 项断言
 自测覆盖两种模式：
 
 ```bash
-npm test            # 常规档：118 项
-CLEAN=1 npm test    # 干净档：116 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm test            # 常规档：120 项
+CLEAN=1 npm test    # 干净档：118 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
 ```
 
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
@@ -259,7 +259,7 @@ npx esbuild src/main.jsx --bundle --format=iife --jsx=automatic \
 node tools/site-test.mjs
 ```
 
-118 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
+120 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
 搜索空态、排序、详情抽屉（色板 / 作品 / 来源链接）、收藏写入 localStorage、导出 CSV、分享、
 日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、
 **开屏交接受回归保护（淡出阶段必须继续匹配归位 transform；开屏背景与文字分层、标题文字零透明度过渡、主页面标题为交接帧硬切换）**、
@@ -392,9 +392,13 @@ node tools/site-test.mjs
 - **内部滚动区一律放行**：抽屉面板与面板内容都带 `data-lenis-prevent`（Lenis 命中后直接 return、不 `preventDefault`），
   外加 `overscroll-behavior: contain` → 抽屉内部仍是原生滚动；
 - 键盘 / 滚动条拖动 / 锚点 / `scrollIntoView` 照常工作（Lenis 会同步；锚点还额外走平滑）；
-- **只在顶部/底部回弹**：越界输入由一段独立的被动橡皮筋表现（`.page` 的 `translate3d`，阻尼 0.45、上限 132px，
-  松手 90ms 后欠阻尼弹回），中部全程不碰 transform，并带 0.5px 滞回阈值 —— 避免逐帧加/删 transform
-  导致合成层反复创建（这也是闪烁来源之一）；
+- **只在顶部/底部回弹**（这段专门为适配 Lenis 重做过）：越界输入由一段独立的被动橡皮筋表现（`.page` 的 `translate3d`），
+  * **与 Lenis 同一套增量归一化**：`LINE_HEIGHT = 100/6`，`deltaMode===1` 乘它、`===2` 乘视口高度 ——
+    否则 Firefox 一格（`deltaMode=1, deltaY=3`）只能拉动 1.35px，等于没有；
+  * **渐进阻尼**：`room = 1 - |rubber|/max`，越拉越紧（实测每格增量 16 → 14 → 14 → 12px）；
+  * **柔和回弹**：`ω=11`、`ζ=0.5`、上限 170px，松手 120ms 后欠阻尼弹回（可见回弹约 0.77s），
+    与 Lenis 1.2s 的 easeOutCubic 滑行观感连贯（原来的 ω=17/ζ=0.42 太急）；
+  * 中部全程不碰 transform，并带 0.5px 滞回阈值 —— 避免逐帧加/删 transform 导致合成层反复创建（闪烁来源之一）；
 - 老环境保护：Lenis 初始化时会无保护地调用 `window.matchMedia` 和 `new ResizeObserver`，
   缺任一个都会抛错（曾导致整站白屏），所以做了存在性检查，缺了就退回原生滚动；
 - `prefers-reduced-motion` 或触摸为主 → 完全不接管。
@@ -408,8 +412,12 @@ node tools/site-test.mjs
 | 单格过程回退量 | **0.0px**（不回跳） |
 | 单格过程 `.page` 的 transform 变化次数 | **0 次**（不闪） |
 | 连续六格 | **720.0px**（精确）、回退 0.0px、transform 变化 0 次 |
-| 到底 / 到顶橡皮筋 | `-132 / +132`（上限），松手 `-132→29→0` / `132→-29→0`，滚动位置不变 |
-| 边缘 transform 变化次数 | **1 次**（开始与归零各一次，无反复闪烁） |
+| 行模式一格（Firefox `deltaMode=1, deltaY=3`）｜拉扯 **16px**（此前只有 1.35px） |
+| 渐进阻尼（连续 4 格） | 增量 `16 → 14 → 14 → 12px`（越拉越紧） |
+| 像素模式一格（Chrome 120px）｜ 拉扯 **38px**，上限 162px（≤170） |
+| 连续输入 | `-39 → -69 → -92 → -109 → -123 → -134 → -142 → -148`（全程单调加深、不提前回弹） |
+| 松手回弹 | `-55.5 → +8.5 → 0`（可见回弹约 **768ms**，柔和不突兀） |
+| 边缘 transform 变化次数 | **1 次**（开始与归零，无反复闪烁） |
 | 抽屉内滚轮 | `defaultPrevented = false`（Lenis 放行）、Δpage = 0.0、抽屉自身可滚动 |
 
 ### 三种构建都验证过

@@ -204,10 +204,18 @@ check('CSS 在 Lenis 接管时关掉 scroll-behavior（否则逐帧写入会打�
   /\.lenis, \.lenis\.lenis-smooth \{ scroll-behavior: auto; \}/.test(cssSrc)
   && /html\.lenis, html\.lenis body \{ height: auto; \}/.test(cssSrc),
   'scroll-behavior: auto + height: auto');
-check('边缘橡皮筋只在越界时出现（带滞回，避免逐帧加删 transform 闪烁）',
-  /activePx:/.test(dampSrc) && /pushingUp/.test(dampCode) && /pushingDown/.test(dampCode)
-  && /max: 132/.test(dampSrc),
-  'pushingUp/pushingDown + activePx 滞回');
+check('边缘橡皮筋与 Lenis 用同一套增量归一化（否则一格拉不动）',
+  /const LINE_HEIGHT = 100 \/ 6;/.test(dampCode) && /deltaMode === 1/.test(dampCode)
+  && /deltaMode === 2/.test(dampCode),
+  'LINE_HEIGHT = 100/6（与 Lenis 内部一致）');
+check('边缘橡皮筋：渐进阻尼 + 只在越界出现 + 滞回防闪',
+  /room = 1 - Math\.min\(1, Math\.abs\(rubber\) \/ cfg\.max\)/.test(dampCode)
+  && /pushingUp/.test(dampCode) && /pushingDown/.test(dampCode)
+  && /activePx:/.test(dampSrc) && /max: 170/.test(dampSrc),
+  'room 渐进阻尼 + activePx 滞回 + 上限 170');
+check('边缘回弹参数柔和（与 Lenis 1.2s 滑行观感匹配）',
+  /omega: 11/.test(dampSrc) && /zeta: 0\.5/.test(dampSrc) && /releaseMs: 120/.test(dampSrc),
+  'omega 11 / zeta 0.5 / release 120ms');
 check('测试环境 ResizeObserver stub 生效', typeof window.ResizeObserver === 'function', typeof window.ResizeObserver);
 check('Lenis 在真实挂载里初始化成功（jsdom 需补 ResizeObserver 才跑得到）',
   !!window.__lenis && typeof window.__lenis.raf === 'function',
