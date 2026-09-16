@@ -32,6 +32,18 @@ function buildDom({ url = 'http://127.0.0.1:8899/?m=4&d=1', fail = () => false }
     pretendToBeVisual: true,
     virtualConsole: vc,
     beforeParse(w) {
+      // jsdom 没有 ResizeObserver，而 Lenis 会无保护地 new 它 —— 补个最小实现，
+      // 这样自测才能真正把 Lenis 初始化链路跑到（生产侧已做存在性保护）
+      if (!w.ResizeObserver) {
+        w.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+      }
+      if (typeof w.matchMedia !== 'function') {
+        w.matchMedia = (q) => ({
+          matches: false, media: q, onchange: null,
+          addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
+          dispatchEvent() { return false; },
+        });
+      }
       w.fetch = async (input) => {
         const raw = typeof input === 'string' ? input : input.url;
         const p = raw.startsWith('http') ? new URL(raw).pathname : raw;
@@ -144,41 +156,6 @@ check('开屏组件在交接帧加 intro-handoff 类',
   && /classList\.add\(INTRO_HANDOFF_CLASS\)/.test(introSrc),
   '交接帧 classList.add(INTRO_HANDOFF_CLASS)');
 
-const libDir = path.join(ROOT, 'src/lib');
-const dampSrc = fs.readFileSync(path.join(libDir, 'scrollSmooth.js'), 'utf8');
-const dampCode = dampSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-check('滚动平滑只剩 scrollSmooth.js（旧实现全部删除）',
-  !['smoothScroll.js', 'scrollDamping.js', 'scrollSpring.js'].some((f) => fs.existsSync(path.join(libDir, f))),
-  ['smoothScroll', 'scrollDamping', 'scrollSpring'].filter((f) => fs.existsSync(path.join(libDir, `${f}.js`))).join(',') || '已清空');
-check('主页面滚轮被平滑接管（无级滚动）',
-  /addEventListener\('wheel'/.test(dampCode) && /e\.preventDefault\(\)/.test(dampCode)
-  && /behavior: 'instant'/.test(dampCode),
-  'wheel + preventDefault + instant scrollTo');
-check('抽屉等内部滚动区必须放行（交还原生滚动）',
-  /insideScrollable/.test(dampCode) && /data-native-scroll/.test(dampCode) && /overflowY/.test(dampCode),
-  '可滚动祖先检测 + data-native-scroll');
-check('键盘 / 滚动条 / 锚点等外部滚动会同步（不与动画打架）',
-  /addEventListener\('scroll'/.test(dampCode) && /SYNC_PX\s*=/.test(dampSrc),
-  'scroll 同步 + SYNC_PX');
-check('中部为临界阻尼跟随（ζ=1：只追平、不过冲 → 不回弹）',
-  /a = cfg\.omega \* cfg\.omega \* \(target - cur\) - 2 \* cfg\.omega \* vCur/.test(dampCode),
-  'a = ω²(target−cur) − 2ω·vCur');
-const omegaVal = Number((dampSrc.match(/const OMEGA = ([\d.]+)/) || [])[1]);
-const lineVal = Number((dampSrc.match(/const LINE_PX = ([\d.]+)/) || [])[1]);
-check('跟随足够柔（OMEGA 12~30：一格有明显滑行，不是瞬移）',
-  omegaVal >= 12 && omegaVal <= 30, `OMEGA=${omegaVal}`);
-check('Firefox 行模式归一化（LINE_PX ≥ 32 → 一格约 120px）',
-  lineVal >= 32, `LINE_PX=${lineVal}（3 行 × ${lineVal} = ${lineVal * 3}px）`);
-check('高速连滚有滞后上限（不会越拖越远）',
-  /MAX_LAG\s*=\s*\d+/.test(dampSrc) && /cfg\.maxLag/.test(dampCode),
-  (dampSrc.match(/const MAX_LAG = (\d+)/) || [])[1] + 'px');
-check('回弹只存在于越界（橡皮筋：有上限、松手才弹）',
-  /MAX_RUBBER\s*=\s*\d+/.test(dampSrc) && /RUBBER_ZETA\s*=/.test(dampSrc)
-  && /RELEASE_MS\s*=/.test(dampSrc) && /const beyond = raw - target/.test(dampCode),
-  'MAX_RUBBER + RUBBER_ZETA + RELEASE_MS + beyond');
-check('滚动平滑在减少动效/触摸设备上自动跳过',
-  /prefers-reduced-motion/.test(dampSrc) && /pointer: coarse/.test(dampSrc), 'reduced-motion + coarse');
-
 /* 卡片浮出：滚到视口时同一行从左到右逐格浮现（按列延迟），滚到哪里才浮现 */
 const resSrc = fs.readFileSync(path.join(ROOT, 'src/components/Results.jsx'), 'utf8');
 check('卡片浮出动画规则存在',
@@ -198,6 +175,45 @@ check('补回缺失的 @keyframes rise（预览项动画原本是哑的）',
 const cardDelays = $$('.card').slice(0, 3).map((el) => el.style.getPropertyValue('--reveal-delay'));
 check('卡片都带 --reveal-delay（jsdom 无布局，退化为 0ms）',
   cardDelays.length > 0 && cardDelays.every((v) => /^\d+ms$/.test(v)), cardDelays.join(','));
+
+const libDir = path.join(ROOT, 'src/lib');
+const dampSrc = fs.readFileSync(path.join(libDir, 'lenisScroll.js'), 'utf8');
+const dampCode = dampSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+check('滚动平滑改用 Lenis（与参考项目同一套）',
+  /import Lenis from 'lenis'/.test(dampCode) && /new Lenis\(/.test(dampCode),
+  'import Lenis from \'lenis\'');
+check('Lenis 参数与参考项目一致',
+  /duration: 1\.2/.test(dampCode) && /1 - \(1 - t\) \*\* 3/.test(dampCode)
+  && /smoothWheel: true/.test(dampCode) && /smoothTouch: false/.test(dampCode)
+  && /autoRaf: false/.test(dampCode),
+  'duration 1.2 + easeOutCubic + smoothWheel + smoothTouch:false + autoRaf:false');
+check('自己驱动 raf（参考项目同款写法）',
+  /lenis\.raf\(time\)/.test(dampCode) && /requestAnimationFrame\(loop\)/.test(dampCode),
+  'lenis.raf(time) in rAF loop');
+check('手写实现全部删除（只留 Lenis 封装）',
+  !['smoothScroll.js', 'scrollDamping.js', 'scrollSpring.js', 'scrollSmooth.js']
+    .some((f) => fs.existsSync(path.join(libDir, f))),
+  ['smoothScroll', 'scrollDamping', 'scrollSpring', 'scrollSmooth']
+    .filter((f) => fs.existsSync(path.join(libDir, `${f}.js`))).join(',') || '已清空');
+check('lenis 已进依赖（构建时装得上）',
+  !!JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).dependencies.lenis,
+  JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).dependencies.lenis);
+check('内部滚动区用 data-lenis-prevent 放行',
+  /data-lenis-prevent/.test(dampCode), 'data-lenis-prevent 检测');
+check('CSS 在 Lenis 接管时关掉 scroll-behavior（否则逐帧写入会打架 → 闪/跳）',
+  /\.lenis, \.lenis\.lenis-smooth \{ scroll-behavior: auto; \}/.test(cssSrc)
+  && /html\.lenis, html\.lenis body \{ height: auto; \}/.test(cssSrc),
+  'scroll-behavior: auto + height: auto');
+check('边缘橡皮筋只在越界时出现（带滞回，避免逐帧加删 transform 闪烁）',
+  /activePx:/.test(dampSrc) && /pushingUp/.test(dampCode) && /pushingDown/.test(dampCode)
+  && /max: 132/.test(dampSrc),
+  'pushingUp/pushingDown + activePx 滞回');
+check('测试环境 ResizeObserver stub 生效', typeof window.ResizeObserver === 'function', typeof window.ResizeObserver);
+check('Lenis 在真实挂载里初始化成功（jsdom 需补 ResizeObserver 才跑得到）',
+  !!window.__lenis && typeof window.__lenis.raf === 'function',
+  `__lenis = ${typeof window.__lenis}${window.__lenisSkip ? '（跳过原因：' + window.__lenisSkip + '）' : ''}`);
+check('减少动效 / 触摸设备不接管滚动',
+  /prefers-reduced-motion/.test(dampSrc) && /pointer: coarse/.test(dampSrc), 'reduced-motion + coarse');
 
 /* 抽屉开关：Q弹（弹簧过冲进场 / 蓄力甩出退场），退场时长必须与 JS 常量一致 */
 const drawerSrc = fs.readFileSync(path.join(ROOT, 'src/components/Drawers.jsx'), 'utf8');
@@ -296,9 +312,12 @@ check('抽屉含色板色块', $$('#drawer-body .swatch').length >= 3, `${$$('#d
 check('抽屉含莫奈取色标题', ($('#drawer-body')?.textContent || '').includes('莫奈取色'));
 if (!CLEAN) check('抽屉含来源链接', $$('#drawer-body .link-row a').length >= 3, `${$$('#drawer-body .link-row a').length} 个`);
 check('抽屉含作品列表', $$('#drawer-body .work-list li').length >= 1);
-check('抽屉面板标记为原生滚动区（不被阻尼/劫持影响）',
+check('抽屉面板标记为原生滚动区（不被平滑滚动接管）',
   $$('.drawer-panel').every((el) => el.getAttribute('data-native-scroll') === '1'),
   `${$$('.drawer-panel').length} 个面板`);
+check('抽屉面板带 data-lenis-prevent（Lenis 直接放行）',
+  $$('.drawer-panel').every((el) => el.hasAttribute('data-lenis-prevent')),
+  `${$$('.drawer-panel').filter((el) => el.hasAttribute('data-lenis-prevent')).length} 个`);
 const swatch = $('#drawer-body .swatch');
 swatch.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await until(() => ($('#toast')?.textContent || '').length > 0);

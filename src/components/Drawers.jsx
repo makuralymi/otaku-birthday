@@ -95,12 +95,12 @@ export function DetailDrawer({ char, index, total, palette, isFav, onClose, onPr
     <aside className={`drawer open${closing ? ' closing' : ''}`} id="drawer" role="dialog" aria-modal="true" aria-label="角色详情">
       <div className="drawer-scrim" onClick={() => requestClose()} />
       {/* key 让换角色时面板重新挂载 → 进场弹簧再弹一次，并且滚动位置回到顶部 */}
-      <div className="drawer-panel" id="drawer-panel" key={char.id} data-native-scroll="1" style={cardVars(pal)}>
+      <div className="drawer-panel" id="drawer-panel" key={char.id} data-native-scroll="1" data-lenis-prevent style={cardVars(pal)}>
         <div className="drawer-head">
           <span className="drawer-index">{index + 1} / {total}</span>
           <button className="drawer-close" id="drawer-close" type="button" onClick={() => requestClose()} aria-label="关闭">×</button>
         </div>
-        <div className="drawer-body" id="drawer-body" data-native-scroll="1">
+        <div className="drawer-body" id="drawer-body" data-native-scroll="1" data-lenis-prevent>
           <div className="d-hero">
             <DetailImage char={char} onPalette={(p) => { setLivePalette(p); onCopy?.(p); }} />
             <div className="d-hero-caption">
@@ -228,12 +228,12 @@ export function FavoritesDrawer({ favs, onClose, onOpen, onRemove, onExport, onC
   return (
     <aside className={`drawer wide open${closing ? ' closing' : ''}`} id="fav-drawer" role="dialog" aria-label="我的收藏">
       <div className="drawer-scrim" onClick={() => requestClose()} />
-      <div className="drawer-panel" data-native-scroll="1">
+      <div className="drawer-panel" data-native-scroll="1" data-lenis-prevent>
         <div className="drawer-head">
           <span className="drawer-index">收藏 {favs.length}</span>
           <button className="drawer-close" id="fav-close" type="button" onClick={() => requestClose()} aria-label="关闭">×</button>
         </div>
-        <div className="drawer-body" data-native-scroll="1">
+        <div className="drawer-body" data-native-scroll="1" data-lenis-prevent>
           <h2 className="section-title">我的收藏</h2>
           <p className="section-sub">保存在本机浏览器里，不会上传。</p>
           <div className="d-actions">

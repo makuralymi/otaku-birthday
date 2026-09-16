@@ -15,7 +15,7 @@
 - 🎂 **月/日选择器**：每个日期后直接显示当天角色数，**选完立即查询**（不需要再点按钮）
 - 🛡 **图源大陆优先**：构建时按「国内可直连」排序（Bangumi / 萌百 / bwiki 优先），并可对缺失大陆图的条目定向补图
 - 🎬 **开屏动画**：居中浮出「日期 + 站点标题」→ 停留 1 秒 → 上移落到主页面标题位置 → 其余内容依次渐显（`prefers-reduced-motion` 下自动跳过）
-- 🌊 **无级平滑滚动（阻尼 + 惯性）**：主页面接管滚轮，把每一格输入平滑成一段「起步柔和 → 加速 → 柔和减速」的连续滑行（一格约 120px、约 300ms 滑完），连续几格会叠成一段长滑行；跟随即为临界阻尼（不回弹），另加滞后上限保证快速连滚不脱节。只有**到顶/到底**才出现橡皮筋拉扯与松手回弹。抽屉等内部滚动区一律交还原生滚动。参数在 `src/lib/scrollSmooth.js` 顶部（`OMEGA` / `MAX_LAG` / `LINE_PX` / `MAX_RUBBER`）
+- 🌊 **平滑滚动（Lenis）**：与参考项目 `Ameath/Fleet-Snowfluff-Web` 同一套参数（`duration 1.2` + easeOutCubic），滚轮输入被平滑成连续滑行、帧间单调不回跳；抽屉等内部滚动区用 `data-lenis-prevent` 完全放行；只有**到顶/到底**才有橡皮筋回弹。参数见 `src/lib/lenisScroll.js`
 - 🃏 **卡片浮出**：`class="grid"` 里的卡片滚进视口才浮现，且**同一行从左到右逐格出现**（延迟 = 列索引 × 80ms，列数按响应式网格实测）；没滚到的部分保持隐藏
 - 🎲 **首屏随机预览**：从 96 条候选池里每次随机抽 24 条展示（每次刷新都不一样），点「换一批」再抽一批（会避开当前这批）
 - 🖼 **角色卡片**：立绘、中文名 / 日文原名 / 罗马音、登场作品、类型、人气
@@ -35,7 +35,7 @@ npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
 npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：116 项断言
+npm test             # jsdom 自测：118 项断言
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -59,8 +59,8 @@ npm test             # jsdom 自测：116 项断言
 自测覆盖两种模式：
 
 ```bash
-npm test            # 常规档：116 项
-CLEAN=1 npm test    # 干净档：114 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm test            # 常规档：118 项
+CLEAN=1 npm test    # 干净档：116 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
 ```
 
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
@@ -259,11 +259,11 @@ npx esbuild src/main.jsx --bundle --format=iife --jsx=automatic \
 node tools/site-test.mjs
 ```
 
-116 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
+118 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
 搜索空态、排序、详情抽屉（色板 / 作品 / 来源链接）、收藏写入 localStorage、导出 CSV、分享、
 日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、
 **开屏交接受回归保护（淡出阶段必须继续匹配归位 transform；开屏背景与文字分层、标题文字零透明度过渡、主页面标题为交接帧硬切换）**、
-**滚动方案受回归保护（不得出现 wheel 劫持与 preventDefault、旧的 smoothScroll/scrollDamping 模块必须已删除、必须是「速度滑窗 + ω/ζ 弹簧阻尼 + 偏移上限 + 静止阈值」、减少动效/触摸设备自动跳过）**、
+**滚动方案受回归保护（用 Lenis 且参数与参考项目一致、CSS 必须关掉 scroll-behavior、内部滚动区带 data-lenis-prevent、缺 matchMedia/ResizeObserver 时退回原生滚动、边缘橡皮筋带滞回阈值）**、
 **`.page` 容器边界（顶栏 / 开屏 / 抽屉等 fixed 元素必须在容器外，避免被阻尼 transform 污染）**、
 **抽屉面板带 `data-native-scroll` 原生滚动标记**、**取色色条逐块浮现（`--i` 递增延迟，且作用域不含抽屉色板）**、**卡片浮出（按列延迟左→右、等开屏交接后才播、列数实测）**、**抽屉开关的 Q 弹动效（closing 态先播退场再卸载、退场时长 JS 与 CSS 一致、移动端 Y 轴版本）**、无 JS 报错。
 
@@ -378,42 +378,39 @@ node tools/site-test.mjs
 | 滚到更下方 | 那一行才出现：483 / 546 / 634 / 720 / 798 ms（间隔 63~88ms） |
 | 浮现完成 | `opacity: 1` |
 
-### 主页面滚动：无级平滑 + 只在上下边缘回弹（`src/lib/scrollSmooth.js`）
+### 主页面滚动：Lenis 平滑滚动 + 只在上下边缘回弹
 
-历史上试过三条错路，都已删除：① 劫持滚轮但没有放过抽屉内部滚动；② 位置滞后 lerp（滞后随累计距离增长）；
-③ 速度驱动的弹簧偏移 —— 它会在**每一次**停手时都回弹一点，方向就错了。
+之前那套是我手写的（逐帧自己算 lerp/弹簧 + 直接写 `scrollTo`），在站点 CSS 的
+`html { scroll-behavior: smooth }` 下会和浏览器自带的滚动动画互相打架 —— 表现就是「一闪一闪、跳来跳去」。
+现在直接采用参考项目 [`Fleet-Snowfluff-Web`](/mnt/data/project/Ameath/Fleet-Snowfluff-Web) 的做法：**Lenis**。
 
-现在的目标与实现：
+- 参数与参考项目一致：`duration: 1.2`、`easing: t => 1 - (1-t)³`（easeOutCubic）、`smoothWheel: true`、
+  `smoothTouch: false`，并用 `requestAnimationFrame` 自己驱动 `lenis.raf(time)`（`autoRaf: false`）；
+- 每次输入被转成一段 duration + easing 的滚动动画（不是「逐帧 lerp 追位置」），帧间位置单调推进、不回跳；
+- 配套 CSS（Lenis 要求）：`.lenis, .lenis.lenis-smooth { scroll-behavior: auto }` ——
+  **必须把 CSS 的 `scroll-behavior` 关掉**，否则浏览器自带的滚动动画会和逐帧写入打架，这就是闪烁的根因；
+- **内部滚动区一律放行**：抽屉面板与面板内容都带 `data-lenis-prevent`（Lenis 命中后直接 return、不 `preventDefault`），
+  外加 `overscroll-behavior: contain` → 抽屉内部仍是原生滚动；
+- 键盘 / 滚动条拖动 / 锚点 / `scrollIntoView` 照常工作（Lenis 会同步；锚点还额外走平滑）；
+- **只在顶部/底部回弹**：越界输入由一段独立的被动橡皮筋表现（`.page` 的 `translate3d`，阻尼 0.45、上限 132px，
+  松手 90ms 后欠阻尼弹回），中部全程不碰 transform，并带 0.5px 滞回阈值 —— 避免逐帧加/删 transform
+  导致合成层反复创建（这也是闪烁来源之一）；
+- 老环境保护：Lenis 初始化时会无保护地调用 `window.matchMedia` 和 `new ResizeObserver`，
+  缺任一个都会抛错（曾导致整站白屏），所以做了存在性检查，缺了就退回原生滚动；
+- `prefers-reduced-motion` 或触摸为主 → 完全不接管。
 
-- **无级平滑（阻尼 + 惯性）**：主页面接管 `wheel`（`preventDefault` 后由自己逐帧驱动），
-  跟随用**临界阻尼**系统 `a = ω²(target−cur) − 2ω·vCur`（ζ=1）：从速度为 0 起步（无突跳）→ 加速 → 柔和减速贴合，
-  **一格约 300ms 滑完**，连续几格自然叠成一段长滑行；`OMEGA=20` 决定黏度（越小越柔、惯性越久）；
-- 每格距离归一化：Firefox 一格是「3 行」（`deltaMode=1`），按 `LINE_PX=40` 换算成 **约 120px**，
-  与 Chrome 的 ~100px/格 对齐（否则 Firefox 一格只走 48px，看起来更像一格一格跳）；
-- `MAX_LAG=150px`：快速连滚时最多落后 1.2 格左右，超过就加快追随 —— 既保留惯性手感，又不会越拖越远；
-- **平时不回弹**：中部的滚动阶段 `.page` 上没有任何 transform，停手后精确停在输入总量上（实测冲过量 0px）；
-- **只有到顶/到底才回弹**：越界的那部分输入变成橡皮筋拉扯（阻尼 0.45、上限 132px），
-  松手 90ms 后用欠阻尼弹簧弹回 0 —— 这是唯一会出现回弹的地方；
-- **抽屉等内部滚动区一律放行**：wheel 若发生在任何可滚动祖先里（`.drawer-panel` / `.drawer-body`、
-  带 `data-native-scroll` 的元素、其它滚动条），完全不接管，交还浏览器原生滚动；
-- **键盘 / 滚动条拖动 / 锚点 / `scrollIntoView` 不拦**：它们改变 `scrollY` 后由 `scroll` 监听自动同步；
-- 逐帧用 `scrollTo({ behavior: 'instant' })` 写位置，避免与 CSS 的 `scroll-behavior: smooth` 叠加成双倍动画；
-- 触摸为主或 `prefers-reduced-motion` → 不接管，保持原生滚动。
-
-无头 Firefox 探针实测：
+无头 Firefox 探针实测（视口 1268×820）：
 
 | 场景 | 结果 |
 | --- | --- |
-| 单格滚轮（deltaY=120） | `0 → 14 → 44 → 69 → 87 → 98 → 111 → 115 → 118 → 120`，**26 帧中间态**、457ms 内完全贴合（可见滑行约 250ms） |
-| 行模式（Firefox 一格 3 行） | 归一化为 **120px** |
-| 连续三格 | 总位移 360px（精确）、冲过量 **0px**、滞后峰值 122px（受 `MAX_LAG=150` 约束） |
-| 位移准确性 | 输入 120px → 滚 120px（不双倍） |
-| 中部：整体位移 | `.page` 的 transform 始终为空（无橡皮筋） |
-| 中部：是否冲过头 | 收尾 `779 → 840`（输入总量 840），**冲过量 0px**，500ms 后仍是 840 |
-| 底部橡皮筋 | `-54 → -108 → -132`（上限）；松手 `-132 → +29 → 0`；`scrollY` 保持不变 |
-| 顶部橡皮筋 | `+68`；松手最低 `-16` → 0；回弹后 `scrollY = 0` |
-| 键盘 / 滚动条式跳转 | `scrollTo(0,400)` 立即生效、无残留 transform |
-| 抽屉内滚轮 | `defaultPrevented = false`（原生滚动），Δpage = 0.0 |
+| 单格滚轮（deltaY=120） | `0 → 28 → 50 → 66 → 82 → 93 → 102 → 108 → 114 → 117 → 119 → 120`（52 帧中间态） |
+| 单格位移 | **120.0px**（精确） |
+| 单格过程回退量 | **0.0px**（不回跳） |
+| 单格过程 `.page` 的 transform 变化次数 | **0 次**（不闪） |
+| 连续六格 | **720.0px**（精确）、回退 0.0px、transform 变化 0 次 |
+| 到底 / 到顶橡皮筋 | `-132 / +132`（上限），松手 `-132→29→0` / `132→-29→0`，滚动位置不变 |
+| 边缘 transform 变化次数 | **1 次**（开始与归零各一次，无反复闪烁） |
+| 抽屉内滚轮 | `defaultPrevented = false`（Lenis 放行）、Δpage = 0.0、抽屉自身可滚动 |
 
 ### 三种构建都验证过
 

@@ -18,7 +18,7 @@ import Calendar from './components/Calendar.jsx';
 import { DetailDrawer, FavoritesDrawer } from './components/Drawers.jsx';
 import { TopBar, About, Footer, Toast } from './components/Layout.jsx';
 import Intro from './components/Intro.jsx';
-import { enableScrollSmooth } from './lib/scrollSmooth.js';
+import { enableSmoothScroll } from './lib/lenisScroll.js';
 
 const FAV_KEY = 'spj:favorites:v1';
 
@@ -65,7 +65,7 @@ export default function App() {
 
   /* ── 全局滚动阻尼（原生滚动之上加平滑/惯性，不劫持滚轮）──── */
   const pageRef = useRef(null);
-  useEffect(() => enableScrollSmooth(() => pageRef.current), []);
+  useEffect(() => enableSmoothScroll(() => pageRef.current), []);
 
   /* ── 收藏 ─────────────────────────────────────────── */
   useEffect(() => {

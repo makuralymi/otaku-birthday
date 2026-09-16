@@ -59,6 +59,15 @@ body {
 img { display: block; max-width: 100%; }
 a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
+/* ── Lenis（平滑滚动）：与参考项目同款样式 ────────────────
+   平滑滚动期间必须把 CSS 的 scroll-behavior 关掉：
+   否则浏览器自带的滚动动画会和 Lenis 的逐帧写入互相打架，
+   表现就是「一闪一闪、跳来跳去」。 */
+html.lenis, html.lenis body { height: auto; }
+.lenis, .lenis.lenis-smooth { scroll-behavior: auto; }
+.lenis:not(.lenis-autoToggle).lenis-stopped { overflow: clip; }
+.lenis [data-lenis-prevent] { overscroll-behavior: contain; }
+
 h1, h2, h3, h4 { font-family: var(--font-serif); font-weight: 600; margin: 0; letter-spacing: .01em; }
 ul, ol { margin: 0; padding: 0; }
 
