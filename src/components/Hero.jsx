@@ -15,7 +15,8 @@ export function PaletteBlocks({ palette, height = 10, className = '' }) {
   return (
     <div className={`palette-blocks ${className}`} style={{ height }} aria-hidden="true">
       {colors.map((hex, i) => (
-        <span key={i} style={{ background: hex }} />
+        // --i 供 CSS 做「依次浮现」的延迟（间隔 70ms），抽屉等其他场景不受影响
+        <span key={i} style={{ background: hex, '--i': i }} />
       ))}
     </div>
   );

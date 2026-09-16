@@ -116,6 +116,22 @@ ul, ol { margin: 0; padding: 0; }
 .palette-blocks span:first-child { border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
 .palette-blocks span:last-child { border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
 
+/* ── 取色色条：开屏动画结束后，5 个色块依次浮现 ──────────
+   整条一起淡太「齐」；改成按 --i 递增延迟（70ms/块），
+   每块自己从下方 6px 浮上来 —— 与页面其他元素同一套动效语言。
+   注意：隐藏初值只给「主色带 / 首屏色条」，抽屉里的色板不受影响。 */
+.colorband .palette-blocks span,
+.hero-blocks span { opacity: 0; }
+body.page-ready .colorband .palette-blocks span,
+body.page-ready .hero-blocks span {
+  animation: swatch-in .42s var(--ease) both;
+  animation-delay: calc(.34s + var(--i, 0) * 70ms);
+}
+@keyframes swatch-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ── 首屏 ─────────────────────────────────────────────── */
 main { display: block; }
 .hero {
@@ -546,7 +562,6 @@ body.intro-lock { overflow: hidden; }
    开屏动画要量标题的最终位置来归位，若标题此刻被下移，量到的目标就是偏的，
    归位之后再回弹 16px —— 这正是「位置对不上、过渡跳一下」的根因。 */
 body.intro-pending:not(.page-ready) .topbar,
-body.intro-pending:not(.page-ready) .colorband,
 body.intro-pending:not(.page-ready) .hero-title,
 body.intro-pending:not(.page-ready) .hero-lede,
 body.intro-pending:not(.page-ready) .picker,
@@ -556,7 +571,6 @@ body.intro-pending:not(.page-ready) section.calendar-section,
 body.intro-pending:not(.page-ready) section.about {
   opacity: 0;
 }
-body.intro-pending:not(.page-ready) .colorband,
 body.intro-pending:not(.page-ready) .hero-lede,
 body.intro-pending:not(.page-ready) .picker,
 body.intro-pending:not(.page-ready) .gallery-block,
@@ -573,13 +587,11 @@ body.intro-handoff .hero-title { opacity: 1; }
 body.page-ready .hero-lede { transition: opacity .5s var(--ease) .14s, transform .5s var(--ease) .14s; }
 body.page-ready .picker { transition: opacity .55s var(--ease) .22s, transform .55s var(--ease) .22s; }
 body.page-ready .gallery-block { transition: opacity .55s var(--ease) .32s, transform .55s var(--ease) .32s; }
-body.page-ready .colorband { transition: opacity .5s var(--ease) .36s; }
 body.page-ready .topbar { transition: opacity .5s var(--ease) .36s, background-color .5s var(--ease); }
 body.page-ready section.results,
 body.page-ready section.calendar-section,
 body.page-ready section.about { transition: opacity .7s var(--ease) .44s, transform .7s var(--ease) .44s; }
 body.page-ready .topbar,
-body.page-ready .colorband,
 body.page-ready .hero-lede,
 body.page-ready .picker,
 body.page-ready .gallery-block,
@@ -597,5 +609,6 @@ body.page-ready .gallery-item:nth-child(3n) { animation-delay: .48s; }
 @media (prefers-reduced-motion: reduce) {
   .intro { display: none; }
   body .hero-title { opacity: 1; }
+  .colorband .palette-blocks span, .hero-blocks span { opacity: 1; animation: none; }
   .card { opacity: 1; transform: none; }
 }

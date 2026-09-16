@@ -35,7 +35,7 @@ npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
 npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：89 项断言
+npm test             # jsdom 自测：95 项断言
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -59,8 +59,8 @@ npm test             # jsdom 自测：89 项断言
 自测覆盖两种模式：
 
 ```bash
-npm test            # 常规档：89 项
-CLEAN=1 npm test    # 干净档：87 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm test            # 常规档：95 项
+CLEAN=1 npm test    # 干净档：93 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
 ```
 
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
@@ -259,13 +259,13 @@ npx esbuild src/main.jsx --bundle --format=iife --jsx=automatic \
 node tools/site-test.mjs
 ```
 
-89 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
+95 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
 搜索空态、排序、详情抽屉（色板 / 作品 / 来源链接）、收藏写入 localStorage、导出 CSV、分享、
 日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、
 **开屏交接受回归保护（淡出阶段必须继续匹配归位 transform；开屏背景与文字分层、标题文字零透明度过渡、主页面标题为交接帧硬切换）**、
 **滚动方案受回归保护（不得出现 wheel 劫持与 preventDefault、必须有 maxLag 限幅与归位阈值、减少动效/触摸设备自动跳过）**、
 **`.page` 容器边界（顶栏 / 开屏 / 抽屉等 fixed 元素必须在容器外，避免被阻尼 transform 污染）**、
-**抽屉面板带 `data-native-scroll` 原生滚动标记**、无 JS 报错。
+**抽屉面板带 `data-native-scroll` 原生滚动标记**、**取色色条逐块浮现（`--i` 递增延迟，且作用域不含抽屉色板）**、无 JS 报错。
 
 动效本身（对位误差、交叉淡入、阻尼曲线）在无头 Firefox 里用真实浏览器探针回归，见下节。
 
@@ -306,6 +306,27 @@ node tools/site-test.mjs
 | 标题可见性断档帧数 | **0 帧**（交接无空档） |
 | 背景层 `.intro-bg` 渐隐中间帧 | 12 帧（其余内容仍逐层浮现） |
 | 交接两端样式 | `rgb(25,24,32)` / w600 / Songti SC，缩放后 **46.0px = 主页面 46.0px** |
+
+### 取色色条：开屏结束后「依次浮现」
+
+`.colorband` 不再整条一起淡入 —— 整条太「齐」，改成每块自己浮现：
+
+- `PaletteBlocks` 给每个色块注入 `--i`（索引）；
+- `body.page-ready` 之后每块执行 `swatch-in`（`opacity 0 → 1` + `translateY(6px → 0)`，420ms），
+  `animation-delay: calc(.34s + var(--i) * 70ms)`，`fill-mode: both` 保证轮到之前一直保持隐藏；
+- 隐藏初值只作用于 `.colorband .palette-blocks span` 与首屏 `.hero-blocks span`，
+  **抽屉里的色板（`.drawer .palette-blocks`）不受影响**；减少动效时关闭动画并直接可见。
+
+实测（无头 Firefox，逐帧采样，时间相对开屏交接）：
+
+| 指标 | 结果 |
+| --- | --- |
+| 5 块出现时刻 | 386 / 439 / 506 / 590 / 657 ms |
+| 相邻间隔 | 53 / 67 / 84 / 67 ms（设计值 70ms） |
+| 首块出现 | 开屏交接后 **386ms**（动画结束后才开始） |
+| 整条铺满跨度 | 271ms |
+| 开屏期间色块 | 全部 opacity 0（不提前露头） |
+| 抽屉内色板 | 始终 opacity 1（不参与） |
 
 ### 滚动：原生滚动 + 视觉阻尼
 

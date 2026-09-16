@@ -156,6 +156,31 @@ check('开屏组件在交接帧加 intro-handoff 类',
   && /classList\.add\(INTRO_HANDOFF_CLASS\)/.test(introSrc),
   '交接帧 classList.add(INTRO_HANDOFF_CLASS)');
 
+/* 取色色条：开屏结束后 5 个色块依次浮现（逐块延迟），抽屉色板不受影响 */
+const heroSrc = fs.readFileSync(path.join(ROOT, 'src/components/Hero.jsx'), 'utf8');
+check('色块带索引变量（供逐块延迟）', /'--i':\s*i/.test(heroSrc), `--i 注入 ${(heroSrc.match(/'--i':\s*i/) || []).length} 处`);
+check('隐藏初值只作用于主色带/首屏色条（不动抽屉色板）',
+  /\.colorband \.palette-blocks span,\s*\n\.hero-blocks span \{ opacity: 0; \}/.test(cssSrc)
+  && !/^\.palette-blocks span \{ opacity: 0/m.test(cssSrc),
+  '作用域限定 .colorband / .hero-blocks');
+check('色块依次浮现（animation-delay 按 --i 递增）',
+  /animation: swatch-in [^;]*both/.test(cssSrc)
+  && /animation-delay: calc\(\.34s \+ var\(--i, 0\) \* 70ms\)/.test(cssSrc)
+  && /@keyframes swatch-in/.test(cssSrc),
+  '340ms + i×70ms');
+check('整条 colorband 不再整体渐显（改由色块负责）',
+  !/body\.page-ready \.colorband \{ transition/.test(cssSrc)
+  && !/body\.page-ready \.colorband,\n/.test(cssSrc),
+  '已从整条渐显组摘除');
+const bandBlocks = $$('.colorband .palette-blocks span');
+check('主色带渲染 5 个色块且各带 --i',
+  bandBlocks.length === 5 && bandBlocks.every((el) => el.style.getPropertyValue('--i') !== ''),
+  `${bandBlocks.length} 块，--i=${bandBlocks.map((el) => el.style.getPropertyValue('--i')).join(',')}`);
+const drawerBefore = $$('.drawer .palette-blocks span').length;
+check('抽屉色板不受隐藏规则影响（初始即可见）',
+  drawerBefore === 0 || $$('.drawer .palette-blocks span').every((el) => !el.style.getPropertyValue('--i')),
+  `抽屉当前渲染 ${drawerBefore} 块`);
+
 /* ── 1. 首屏与数据 ─────────────────────────────────── */
 check('meta 统计渲染', $('#stat-total')?.textContent !== '—' && /^\d/.test($('#stat-total')?.textContent || ''), $('#stat-total')?.textContent);
 check('月份下拉 12 项', $$('#sel-month option').length === 12, `${$$('#sel-month option').length}`);
