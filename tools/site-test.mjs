@@ -122,17 +122,20 @@ check('主内容包在 .page 容器内（阻尼只作用这一层）',
 check('常驻 fixed 元素（顶栏）在 .page 外',
   !!$('.topbar') && !$('.page .topbar'), `topbar 在 page 内=${!!$('.page .topbar')}`);
 const libDir = path.join(ROOT, 'src/lib');
-const dampSrc = fs.readFileSync(path.join(libDir, 'scrollDamping.js'), 'utf8');
+const dampSrc = fs.readFileSync(path.join(libDir, 'scrollSpring.js'), 'utf8');
 const dampCode = dampSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-check('滚动=原生+视觉阻尼，不再劫持滚轮',
+check('滚动=原生+柔和偏移，不再劫持滚轮',
   !fs.existsSync(path.join(libDir, 'smoothScroll.js'))
+  && !fs.existsSync(path.join(libDir, 'scrollDamping.js'))
   && !/addEventListener\(\s*'wheel'/.test(dampCode) && !/preventDefault/.test(dampCode),
-  fs.existsSync(path.join(libDir, 'smoothScroll.js')) ? 'smoothScroll.js 仍存在'
-    : (/preventDefault/.test(dampCode) ? '代码里仍有 preventDefault' : '无 wheel 劫持 / 无 preventDefault'));
-check('阻尼在减少动效/触摸设备上自动跳过',
+  /preventDefault/.test(dampCode) ? '代码里仍有 preventDefault' : '无 wheel 劫持 / 无 preventDefault / 旧模块已删');
+check('滚动平滑在减少动效/触摸设备上自动跳过',
   /prefers-reduced-motion/.test(dampSrc) && /pointer: coarse/.test(dampSrc), 'reduced-motion + coarse');
-check('阻尼有 maxLag 限幅与归位阈值',
-  /MAX_LAG\s*=\s*\d+/.test(dampSrc) && /SETTLE\s*=/.test(dampSrc), '限幅 + settle');
+check('滚动平滑=速度驱动 + 二阶弹簧阻尼（含限幅与静止阈值）',
+  /OMEGA\s*=\s*[\d.]+/.test(dampSrc) && /ZETA\s*=\s*[\d.]+/.test(dampSrc)
+  && /MAX_OFFSET\s*=\s*\d+/.test(dampSrc)
+  && /REST_X\s*=/.test(dampSrc) && /REST_V\s*=/.test(dampSrc) && /VEL_WIN\s*=\s*\d+/.test(dampSrc)
+  && /requestAnimationFrame/.test(dampSrc), 'ω / ζ / 上限 / 静止阈值 / 速度滑窗 / rAF');
 
 /* 开屏标题「不淡入淡出」：背景层与文字层分层，交接为同位置硬切换 */
 const introSrc = fs.readFileSync(path.join(ROOT, 'src/components/Intro.jsx'), 'utf8');
