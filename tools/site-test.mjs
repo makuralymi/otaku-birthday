@@ -179,6 +179,26 @@ check('回弹只存在于越界（橡皮筋：有上限、松手才弹）',
 check('滚动平滑在减少动效/触摸设备上自动跳过',
   /prefers-reduced-motion/.test(dampSrc) && /pointer: coarse/.test(dampSrc), 'reduced-motion + coarse');
 
+/* 卡片浮出：滚到视口时同一行从左到右逐格浮现（按列延迟），滚到哪里才浮现 */
+const resSrc = fs.readFileSync(path.join(ROOT, 'src/components/Results.jsx'), 'utf8');
+check('卡片浮出动画规则存在',
+  /\.card \{ opacity: 0; transform: translateY\(14px\); \}/.test(cssSrc)
+  && /body\.intro-handoff \.card\.is-in \{/.test(cssSrc)
+  && /animation-delay: var\(--reveal-delay/.test(cssSrc)
+  && /@keyframes card-in/.test(cssSrc),
+  'card-in + --reveal-delay + 等开屏交接后才播');
+check('延迟按列索引计算（行内左→右）',
+  /'--reveal-delay'/.test(resSrc) && /index % cols/.test(resSrc) && /\* 80\}ms/.test(resSrc),
+  'delay = (列索引) × 80ms');
+check('列数由网格实测（响应式 auto-fill 会变列数）',
+  /gridTemplateColumns/.test(resSrc) && /ResizeObserver/.test(resSrc) && /cols=\{cols\}/.test(resSrc),
+  'ResizeObserver + gridTemplateColumns → cols');
+check('补回缺失的 @keyframes rise（预览项动画原本是哑的）',
+  /@keyframes rise \{/.test(cssSrc), 'rise 关键帧已定义');
+const cardDelays = $$('.card').slice(0, 3).map((el) => el.style.getPropertyValue('--reveal-delay'));
+check('卡片都带 --reveal-delay（jsdom 无布局，退化为 0ms）',
+  cardDelays.length > 0 && cardDelays.every((v) => /^\d+ms$/.test(v)), cardDelays.join(','));
+
 /* 抽屉开关：Q弹（弹簧过冲进场 / 蓄力甩出退场），退场时长必须与 JS 常量一致 */
 const drawerSrc = fs.readFileSync(path.join(ROOT, 'src/components/Drawers.jsx'), 'utf8');
 const exitMs = Number((drawerSrc.match(/DRAWER_EXIT_MS = (\d+)/) || [])[1]);

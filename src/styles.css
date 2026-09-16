@@ -290,6 +290,21 @@ section.results, section.calendar-section, section.about {
   cursor: pointer;
   transition: background-color .25s var(--ease), border-color .25s var(--ease);
 }
+/* ── 卡片浮出：滚到视口时，同一行从左到右一格一格浮出 ──────
+   延迟由 JS 按「列索引」写进 --reveal-delay（列 × 80ms）；
+   整段动画要等开屏交接完（body.intro-handoff）才生效 ——
+   否则首屏那几行的错峰会被开屏盖住，用户根本看不到。
+   没滚到的卡片保持 opacity:0，所以是「滚动到哪里，哪里才浮现」。 */
+.card { opacity: 0; transform: translateY(14px); }
+body.intro-handoff .card.is-in {
+  animation: card-in .5s var(--ease) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .card:hover, .card:focus-visible {
   background: var(--c-surface-alt, var(--panel-2));
   border-color: var(--c-accent, var(--m-accent));
@@ -659,6 +674,10 @@ body.page-ready section.calendar-section,
 body.page-ready section.about {
   opacity: 1;
   transform: translateY(0);
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 body.page-ready .gallery-item { animation: rise .5s var(--ease) backwards; }
 body.page-ready .gallery-item:nth-child(3n+1) { animation-delay: .36s; }

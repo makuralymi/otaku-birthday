@@ -11,7 +11,7 @@ import { compact } from '../lib/format.js';
 import { CLEAN_BUILD } from '../lib/buildflags.js';
 
 /** 单张角色卡：进入视口后取色 + 多线路加载立绘 */
-export function CharacterCard({ char, index, isFav, onOpen, onToggleFav, onHover, priority }) {
+export function CharacterCard({ char, index, cols = 1, isFav, onOpen, onToggleFav, onHover, priority }) {
   // 索引来源的记录（全局搜索）缺少简介/作品明细，点开时由上层跳到当天页面再展开
   const cardRef = useRef(null);
   const imgRef = useRef(null);
@@ -75,7 +75,8 @@ export function CharacterCard({ char, index, isFav, onOpen, onToggleFav, onHover
     <article
       ref={cardRef}
       className={`card${shown ? ' is-in' : ''}`}
-      style={{ ...cardVars(palette), '--reveal-delay': `${Math.min(index % 12, 9) * 40}ms` }}
+      // 延迟按「列索引」算：同一行里左边先出、右边依次跟上（滚动到哪一行，哪一行这样出）
+      style={{ ...cardVars(palette), '--reveal-delay': `${(cols > 1 ? index % cols : 0) * 80}ms` }}
       role="button"
       tabIndex={0}
       data-id={char.id}
@@ -130,6 +131,31 @@ export default function Results({
   loading, onFilterChange, onOpen, onOpenFromSearch, onToggleFav, favIds, onHover,
   onExport, onShare, onGlobalSearch, onReset, onRandom, onNear,
 }) {
+  // 网格当前列数：auto-fill 会随视口变化，用 ResizeObserver 量出来，
+  // 卡片据此把它们「第几列」映射成错峰延迟（左 → 右依次浮现）
+  const gridRef = useRef(null);
+  const [cols, setCols] = useState(1);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const tracks = window.getComputedStyle(el).gridTemplateColumns || '';
+      const n = tracks && tracks !== 'none' ? tracks.split(' ').filter(Boolean).length : 0;
+      setCols(n > 0 ? n : 1);
+    };
+    measure();
+    let ro = null;
+    if (typeof ResizeObserver === 'function') {
+      ro = new ResizeObserver(measure);
+      ro.observe(el);
+    }
+    window.addEventListener('resize', measure);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [loading, filtered.length]);
+
   const [globalLoading, setGlobalLoading] = useState(0);
   const typeCount = {};
   baseRows.forEach((r) => r.types.forEach((t) => { typeCount[t] = (typeCount[t] || 0) + 1; }));
@@ -203,12 +229,13 @@ export default function Results({
           {Array.from({ length: 10 }, (_, i) => <div className="sk-card" key={i} />)}
         </div>
       ) : filtered.length ? (
-        <div className="grid" id="grid" onMouseLeave={() => onHover(null)}>
+        <div className="grid" id="grid" ref={gridRef} onMouseLeave={() => onHover(null)}>
           {filtered.map((c, i) => (
             <CharacterCard
               key={c.id}
               char={c}
               index={i}
+              cols={cols}
               isFav={favIds.has(c.id)}
               onOpen={isGlobal ? (() => onOpenFromSearch?.(c)) : onOpen}
               onToggleFav={onToggleFav}
