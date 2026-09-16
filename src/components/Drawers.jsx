@@ -3,13 +3,55 @@
    布局用纯色块分区：头像区、色板区、信息区各是一块实色。
    ============================================================ */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { displayName, subName, primaryWork, SRC_LABEL } from '../lib/data.js';
 import { cardVars, paletteForCard, quickPalette } from '../lib/palette.js';
 import { routeChain, mountImage, loadedRouteOf, placeholderURI } from '../lib/images.js';
 import { CLEAN_BUILD, LOCAL_IMAGES_ONLY } from '../lib/buildflags.js';
 import { compact, linksOf } from '../lib/format.js';
 import { PaletteBlocks } from './Hero.jsx';
+
+export const DRAWER_EXIT_MS = 300;   // 必须与 CSS 里 drawer-out 的时长一致
+
+/** 带「Q弹退场」的关闭流程：
+ *  关闭不是立刻卸载，而是先加 .closing 播退场动画，动画结束再真正 onClose()。
+ *  ESC / 遮罩 / 关闭按钮 / 「打开某条收藏」都走这里；开启减少动效时直接关。
+ *  after：可选的「关闭后要做的事」（例如收藏夹里点某条 → 退场后再跳转）。 */
+function useSpringClose(onClose) {
+  const [closing, setClosing] = useState(false);
+  const afterRef = useRef(null);
+  const reduce = typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+
+  const requestClose = useCallback((after) => {
+    if (reduce || closing) {
+      if (!closing) (after || onClose)?.();
+      return;
+    }
+    afterRef.current = after || null;
+    setClosing(true);
+  }, [reduce, closing, onClose]);
+
+  useEffect(() => {
+    if (!closing) return undefined;
+    const timer = setTimeout(() => {
+      const after = afterRef.current;
+      afterRef.current = null;
+      if (after) after();
+      else onClose?.();
+    }, DRAWER_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [closing, onClose]);
+
+  // ESC 也走同一套（有抽屉打开时 App 不再抢 ESC）
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') requestClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [requestClose]);
+
+  return { closing, requestClose };
+}
 
 /** 详情大图：多线路加载 + 加载后按真实图片再取一次色 */
 function DetailImage({ char, onPalette }) {
@@ -33,6 +75,7 @@ export function DetailDrawer({ char, index, total, palette, isFav, onClose, onPr
   const [livePalette, setLivePalette] = useState(null);
   const pal = livePalette || palette || quickPalette(char);
   const [copied, setCopied] = useState('');
+  const { closing, requestClose } = useSpringClose(onClose);
 
   useEffect(() => { setLivePalette(null); setCopied(''); }, [char?.id]);
 
@@ -49,12 +92,13 @@ export function DetailDrawer({ char, index, total, palette, isFav, onClose, onPr
   ].filter(Boolean);
 
   return (
-    <aside className="drawer open" id="drawer" role="dialog" aria-modal="true" aria-label="角色详情">
-      <div className="drawer-scrim" onClick={onClose} />
-      <div className="drawer-panel" id="drawer-panel" data-native-scroll="1" style={cardVars(pal)}>
+    <aside className={`drawer open${closing ? ' closing' : ''}`} id="drawer" role="dialog" aria-modal="true" aria-label="角色详情">
+      <div className="drawer-scrim" onClick={() => requestClose()} />
+      {/* key 让换角色时面板重新挂载 → 进场弹簧再弹一次，并且滚动位置回到顶部 */}
+      <div className="drawer-panel" id="drawer-panel" key={char.id} data-native-scroll="1" style={cardVars(pal)}>
         <div className="drawer-head">
           <span className="drawer-index">{index + 1} / {total}</span>
-          <button className="drawer-close" id="drawer-close" type="button" onClick={onClose} aria-label="关闭">×</button>
+          <button className="drawer-close" id="drawer-close" type="button" onClick={() => requestClose()} aria-label="关闭">×</button>
         </div>
         <div className="drawer-body" id="drawer-body" data-native-scroll="1">
           <div className="d-hero">
@@ -180,13 +224,14 @@ export function DetailDrawer({ char, index, total, palette, isFav, onClose, onPr
 }
 
 export function FavoritesDrawer({ favs, onClose, onOpen, onRemove, onExport, onClear }) {
+  const { closing, requestClose } = useSpringClose(onClose);
   return (
-    <aside className="drawer wide open" id="fav-drawer" role="dialog" aria-label="我的收藏">
-      <div className="drawer-scrim" onClick={onClose} />
+    <aside className={`drawer wide open${closing ? ' closing' : ''}`} id="fav-drawer" role="dialog" aria-label="我的收藏">
+      <div className="drawer-scrim" onClick={() => requestClose()} />
       <div className="drawer-panel" data-native-scroll="1">
         <div className="drawer-head">
           <span className="drawer-index">收藏 {favs.length}</span>
-          <button className="drawer-close" id="fav-close" type="button" onClick={onClose} aria-label="关闭">×</button>
+          <button className="drawer-close" id="fav-close" type="button" onClick={() => requestClose()} aria-label="关闭">×</button>
         </div>
         <div className="drawer-body" data-native-scroll="1">
           <h2 className="section-title">我的收藏</h2>
@@ -210,7 +255,7 @@ export function FavoritesDrawer({ favs, onClose, onOpen, onRemove, onExport, onC
                       />
                     ) : null}
                   </span>
-                  <button className="fav-body" type="button" onClick={() => onOpen(c)}>
+                  <button className="fav-body" type="button" onClick={() => requestClose(() => onOpen(c))}>
                     <b>{displayName(c)}</b>
                     <small>{c.month} 月 {c.day} 日 · {primaryWork(c)}</small>
                   </button>

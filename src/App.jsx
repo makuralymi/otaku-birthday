@@ -244,7 +244,8 @@ export default function App() {
   /* ── 键盘：Esc 关闭，← → 换角色 / 换日期 ───────────── */
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') { closeDrawer(); setFavOpen(false); return; }
+      // 抽屉自己处理 ESC（带 Q 弹退场动画）；没有抽屉时才走这里的兜底
+      if (e.key === 'Escape') { if (current || favOpen) return; setFavOpen(false); return; }
       const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
       if (currentIndex >= 0) {
         if (e.key === 'ArrowLeft' && currentIndex > 0) openDrawer(currentIndex - 1);
@@ -263,7 +264,7 @@ export default function App() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [currentIndex, filtered.length, month, day, openDrawer, closeDrawer, selectDate]);
+  }, [current, favOpen, currentIndex, filtered.length, month, day, openDrawer, closeDrawer, selectDate]);
 
   /* ── 浏览器前进 / 后退 ────────────────────────────── */
   useEffect(() => {

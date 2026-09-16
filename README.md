@@ -35,7 +35,7 @@ npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
 npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：95 项断言
+npm test             # jsdom 自测：104 项断言
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -59,8 +59,8 @@ npm test             # jsdom 自测：95 项断言
 自测覆盖两种模式：
 
 ```bash
-npm test            # 常规档：95 项
-CLEAN=1 npm test    # 干净档：93 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm test            # 常规档：104 项
+CLEAN=1 npm test    # 干净档：102 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
 ```
 
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
@@ -259,13 +259,13 @@ npx esbuild src/main.jsx --bundle --format=iife --jsx=automatic \
 node tools/site-test.mjs
 ```
 
-95 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
+104 项断言覆盖：下拉与人数、URL 同步、卡片渲染与纯色变量、日历 366 天纯色分级、类型筛选、
 搜索空态、排序、详情抽屉（色板 / 作品 / 来源链接）、收藏写入 localStorage、导出 CSV、分享、
 日期跳转、**选择器（选月/选日立即生效且不被覆盖）**、R18 开关、页脚项目地址（含图标）、**立绘线路降级（origin → 备用 → 镜像 → 代理 → 占位图）**、**分片 404 退回全量 CSV**、
 **开屏交接受回归保护（淡出阶段必须继续匹配归位 transform；开屏背景与文字分层、标题文字零透明度过渡、主页面标题为交接帧硬切换）**、
 **滚动方案受回归保护（不得出现 wheel 劫持与 preventDefault、旧的 smoothScroll/scrollDamping 模块必须已删除、必须是「速度滑窗 + ω/ζ 弹簧阻尼 + 偏移上限 + 静止阈值」、减少动效/触摸设备自动跳过）**、
 **`.page` 容器边界（顶栏 / 开屏 / 抽屉等 fixed 元素必须在容器外，避免被阻尼 transform 污染）**、
-**抽屉面板带 `data-native-scroll` 原生滚动标记**、**取色色条逐块浮现（`--i` 递增延迟，且作用域不含抽屉色板）**、无 JS 报错。
+**抽屉面板带 `data-native-scroll` 原生滚动标记**、**取色色条逐块浮现（`--i` 递增延迟，且作用域不含抽屉色板）**、**抽屉开关的 Q 弹动效（closing 态先播退场再卸载、退场时长 JS 与 CSS 一致、移动端 Y 轴版本）**、无 JS 报错。
 
 动效本身（对位误差、交叉淡入、阻尼曲线）在无头 Firefox 里用真实浏览器探针回归，见下节。
 
@@ -327,6 +327,30 @@ node tools/site-test.mjs
 | 整条铺满跨度 | 271ms |
 | 开屏期间色块 | 全部 opacity 0（不提前露头） |
 | 抽屉内色板 | 始终 opacity 1（不参与） |
+
+### 抽屉开关：Q弹（弹簧过冲）
+
+侧栏（`class="drawer-panel"`）原来没有任何开关动画，现在：
+
+- **进场**：`@keyframes drawer-in` —— 从屏外滑入 → 冲过静止位 ~16px（并轻微挤压 `scaleX(1.014)`）→ 小回弹 → 稳定，
+  `transform-origin` 放在贴边那一侧，挤压像「果冻贴在边」；内部内容随后 0.07s 淡入上浮；
+- **退场**：`@keyframes drawer-out` —— 先**反向蓄力**（往回顶 13px）→ 甩出并压扁（`scaleX(.94)`）；
+- 退场需要元素先别卸载，所以新增 `useSpringClose`：关闭时先加 `.closing` 播 300ms 退场动画，动画结束才真正 `onClose()`；
+- **× 按钮 / 遮罩 / ESC / 收藏夹里点某条**都走这条路径（点收藏条时先播退场再跳转）；
+  App 在有抽屉打开时不再抢 ESC，交给抽屉自己处理；开启减少动效时直接关，不做延迟；
+- 移动端（≤560px，底部抽屉）用 `drawer-in-mobile` / `drawer-out-mobile`，同样的 Q 弹换成 Y 轴；
+- 换角色时面板带 `key={char.id}` 重新挂载 → 弹簧再弹一次，同时滚动位置回到顶部。
+
+无头 Firefox 探针实测（面板静止位 left=816）：
+
+| 场景 | 结果 |
+| --- | --- |
+| 进场轨迹 | `1313（屏外）→ 875 → **807**（冲过静止位 22px）→ 816 稳定` |
+| 退场轨迹 | `809 → **800**（反向蓄力 16px）→ 856 → 1288（甩出视口）→ 卸载` |
+| 收藏抽屉（宽 560） | `1324 → 最左 684（过冲 24px）→ 708 稳定` |
+| ESC 关闭 | 同样先 `.closing`，动画结束再卸载 |
+| 退场时长一致性 | JS `DRAWER_EXIT_MS=300` == CSS `.3s`（避免动画中途卸载） |
+| 回归 | 抽屉内滚轮未被 `preventDefault`、`data-native-scroll` 保留、页面滚动弹簧正常 |
 
 ### 滚动平滑：速度驱动的弹簧-阻尼模型（`src/lib/scrollSpring.js`）
 

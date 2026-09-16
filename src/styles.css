@@ -379,10 +379,69 @@ section.results, section.calendar-section, section.about {
 .drawer-close:hover { background: var(--m-surface-alt); }
 .drawer-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px 18px 20px; }
 .drawer-panel { overscroll-behavior: contain; }
+
+/* ── 抽屉开关：Q弹（弹簧过冲 + 挤压） ──────────────────
+   进场：从屏外滑入 → 冲过静止位一点（挤压回弹）→ 稳定；
+   退场：先反向蓄力 → 甩出并压扁。
+   transform-origin 放在贴边那一侧，挤压才像「果冻贴在边上」。 */
+@keyframes drawer-in {
+  0%   { transform: translate3d(104%, 0, 0) scaleX(.94); }
+  46%  { transform: translate3d(-16px, 0, 0) scaleX(1.014); }
+  64%  { transform: translate3d(7px, 0, 0) scaleX(.997); }
+  80%  { transform: translate3d(-2.5px, 0, 0) scaleX(1.002); }
+  92%  { transform: translate3d(1px, 0, 0) scaleX(1); }
+  100% { transform: translate3d(0, 0, 0) scaleX(1); }
+}
+@keyframes drawer-out {
+  0%   { transform: translate3d(0, 0, 0) scaleX(1); }
+  14%  { transform: translate3d(-13px, 0, 0) scaleX(1.008); }
+  40%  { transform: translate3d(30px, 0, 0) scaleX(.985); }
+  64%  { transform: translate3d(58%, 0, 0) scaleX(.965); }
+  100% { transform: translate3d(104%, 0, 0) scaleX(.94); }
+}
+@keyframes drawer-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drawer-scrim-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes drawer-body-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.drawer.open .drawer-panel {
+  transform-origin: right center;
+  animation: drawer-in .52s cubic-bezier(.24, .86, .3, 1) backwards;
+}
+.drawer.open .drawer-scrim { animation: drawer-scrim-in .3s var(--ease) backwards; }
+.drawer.open .drawer-body { animation: drawer-body-in .42s var(--ease) .07s backwards; }
+/* 退场：时长必须与 DRAWER_EXIT_MS（300ms）一致，否则会在动画中途被卸载 */
+.drawer.closing .drawer-panel {
+  animation: drawer-out .3s cubic-bezier(.4, .02, .7, .34) forwards;
+}
+.drawer.closing .drawer-scrim { animation: drawer-scrim-out .3s linear forwards; }
 .drawer-foot { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
 .drawer-foot .btn { flex: 1; }
 @media (max-width: 560px) {
   .drawer-panel { top: auto; bottom: 0; height: min(90vh, 800px); width: 100%; border-left: 0; border-top: 1px solid var(--line); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  /* 底部抽屉：同样的 Q 弹，只是换成 Y 轴 */
+  @keyframes drawer-in-mobile {
+    0%   { transform: translate3d(0, 104%, 0) scaleY(.94); }
+    46%  { transform: translate3d(0, -14px, 0) scaleY(1.012); }
+    64%  { transform: translate3d(0, 6px, 0) scaleY(.998); }
+    80%  { transform: translate3d(0, -2px, 0) scaleY(1.001); }
+    100% { transform: translate3d(0, 0, 0) scaleY(1); }
+  }
+  @keyframes drawer-out-mobile {
+    0%   { transform: translate3d(0, 0, 0) scaleY(1); }
+    14%  { transform: translate3d(0, -12px, 0) scaleY(1.006); }
+    40%  { transform: translate3d(0, 26px, 0) scaleY(.986); }
+    64%  { transform: translate3d(0, 58%, 0) scaleY(.966); }
+    100% { transform: translate3d(0, 104%, 0) scaleY(.94); }
+  }
+  .drawer.open .drawer-panel {
+    transform-origin: center bottom;
+    animation: drawer-in-mobile .52s cubic-bezier(.24, .86, .3, 1) backwards;
+  }
+  .drawer.closing .drawer-panel {
+    animation: drawer-out-mobile .3s cubic-bezier(.4, .02, .7, .34) forwards;
+  }
 }
 
 /* 详情内容 */

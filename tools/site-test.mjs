@@ -159,6 +159,28 @@ check('开屏组件在交接帧加 intro-handoff 类',
   && /classList\.add\(INTRO_HANDOFF_CLASS\)/.test(introSrc),
   '交接帧 classList.add(INTRO_HANDOFF_CLASS)');
 
+/* 抽屉开关：Q弹（弹簧过冲进场 / 蓄力甩出退场），退场时长必须与 JS 常量一致 */
+const drawerSrc = fs.readFileSync(path.join(ROOT, 'src/components/Drawers.jsx'), 'utf8');
+const exitMs = Number((drawerSrc.match(/DRAWER_EXIT_MS = (\d+)/) || [])[1]);
+const cssExit = Number((cssSrc.match(/\.drawer\.closing \.drawer-panel \{\s*animation: drawer-out ([\d.]+)s/) || [])[1]) * 1000;
+check('抽屉进场为弹簧过冲动画',
+  /@keyframes drawer-in \{/.test(cssSrc)
+  && /\.drawer\.open \.drawer-panel \{[^}]*animation: drawer-in/.test(cssSrc)
+  && /scaleX\(1\.01/.test(cssSrc),
+  'drawer-in + 过冲 scaleX');
+check('抽屉退场为蓄力甩出动画',
+  /@keyframes drawer-out \{/.test(cssSrc)
+  && /\.drawer\.closing \.drawer-panel \{[^}]*animation: drawer-out/.test(cssSrc),
+  'drawer-out');
+check('退场时长 JS 与 CSS 一致（避免动画中途卸载）',
+  exitMs > 0 && exitMs === cssExit, `JS ${exitMs}ms vs CSS ${cssExit}ms`);
+check('移动端（底部抽屉）用 Y 轴版本', /@keyframes drawer-in-mobile \{/.test(cssSrc) && /drawer-out-mobile/.test(cssSrc), 'drawer-in/out-mobile');
+check('关闭走「先 closing、再卸载」的流程',
+  /const \{ closing, requestClose \} = useSpringClose\(onClose\)/.test(drawerSrc)
+  && /\.closing/.test(drawerSrc)
+  && /setTimeout\(/.test(drawerSrc),
+  'useSpringClose');
+
 /* 取色色条：开屏结束后 5 个色块依次浮现（逐块延迟），抽屉色板不受影响 */
 const heroSrc = fs.readFileSync(path.join(ROOT, 'src/components/Hero.jsx'), 'utf8');
 check('色块带索引变量（供逐块延迟）', /'--i':\s*i/.test(heroSrc), `--i 注入 ${(heroSrc.match(/'--i':\s*i/) || []).length} 处`);
@@ -252,9 +274,15 @@ $('#nav-fav').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await until(() => $$('#fav-list .fav-item').length > 0);
 check('收藏夹抽屉列表', $$('#fav-list .fav-item').length === 1, `${$$('#fav-list .fav-item').length}`);
 $('#fav-close').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(30);   // React 的 class 更新在下一个 tick，等一拍再断言
+check('收藏抽屉关闭先进入 closing 态',
+  $('#fav-drawer')?.classList.contains('closing'), $('#fav-drawer')?.className || '(已卸载)');
 $('#drawer-close').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-await until(() => !$('#drawer'));
-check('抽屉关闭', !$('#drawer'));
+await wait(30);
+check('点 × 后先进入 closing 态（播退场动画）',
+  $('#drawer')?.classList.contains('closing'), $('#drawer')?.className || '(已卸载)');
+await until(() => !$('#fav-drawer') && !$('#drawer'));
+check('抽屉关闭', !$('#drawer') && !$('#fav-drawer'));
 
 /* ── 7. 日期跳转 ───────────────────────────────────── */
 $('#btn-today').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -405,8 +433,12 @@ if (globalBtn) {
     `${st3.month}/${st3.day} vs ${target.month}/${target.day}`);
   check('跳转后拿到完整记录（含简介）', ($('#drawer-body')?.textContent || '').length > 80,
     `${($('#drawer-body')?.textContent || '').length} 字`);
-  $('#drawer-close')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  await wait(200);
+  window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await wait(30);
+  check('ESC 关闭先进入 closing 态（Q 弹退场）',
+    $('#drawer')?.classList.contains('closing'), $('#drawer')?.className || '(已卸载)');
+  await until(() => !$('#drawer'));
+  check('ESC 关闭后抽屉卸载', !$('#drawer'));
 } else {
   check('跨月搜索返回结果', true, '当天已有「初音」结果，跳过全局搜索路径');
   check('搜索模式标记正确', true, '跳过');
