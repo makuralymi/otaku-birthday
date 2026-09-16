@@ -106,11 +106,12 @@ check('主页面进入就绪态（内容渐显）', window.document.body.classLi
 check('卡片已加浮出类', $$('.card.is-in').length > 0, `${$$('.card.is-in').length} 张`);
 
 /* ── 0.1 开屏→主页面交接 & 滚动方案（源码级回归）─────────
-   这两点都是真实浏览器里踩过的坑，jsdom 测不到动效，所以直接锁住源码形态：
+   这些都是真实浏览器里踩过/调过的东西，jsdom 测不到动效，所以直接锁住源码形态：
      · 开屏 fade 阶段必须继续匹配归位 transform，否则文字会在淡出的 240ms 里
        反向滑回中心（交接「漂一下」）
-     · 滚动只允许「原生滚动 + 视觉阻尼」，不允许再回到劫持 wheel 的方案
-       （会破坏触控板惯性、键盘与抽屉内部滚动） */
+     · 标题文字不淡入淡出：背景层单独渐隐 + 主页面标题在交接帧硬切换
+     · 滚动 = 主页面无级平滑（接管 wheel）+ 只在上下边缘的橡皮筋回弹；
+       抽屉等内部可滚动区必须放行，键盘/滚动条/锚点必须同步而不是被拦 */
 const cssSrc = fs.readFileSync(path.join(ROOT, 'src/styles.css'), 'utf8');
 check('开屏淡出阶段保留归位 transform（防淡出时漂回中心）',
   /\.intro-fade\.intro-go\s+\.intro-title-text/.test(cssSrc)
@@ -121,22 +122,6 @@ check('主内容包在 .page 容器内（阻尼只作用这一层）',
   `page 内 main=${!!$('.page main')} colorband=${!!$('.page .colorband')} footer=${!!$('.page footer')}`);
 check('常驻 fixed 元素（顶栏）在 .page 外',
   !!$('.topbar') && !$('.page .topbar'), `topbar 在 page 内=${!!$('.page .topbar')}`);
-const libDir = path.join(ROOT, 'src/lib');
-const dampSrc = fs.readFileSync(path.join(libDir, 'scrollSpring.js'), 'utf8');
-const dampCode = dampSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-check('滚动=原生+柔和偏移，不再劫持滚轮',
-  !fs.existsSync(path.join(libDir, 'smoothScroll.js'))
-  && !fs.existsSync(path.join(libDir, 'scrollDamping.js'))
-  && !/addEventListener\(\s*'wheel'/.test(dampCode) && !/preventDefault/.test(dampCode),
-  /preventDefault/.test(dampCode) ? '代码里仍有 preventDefault' : '无 wheel 劫持 / 无 preventDefault / 旧模块已删');
-check('滚动平滑在减少动效/触摸设备上自动跳过',
-  /prefers-reduced-motion/.test(dampSrc) && /pointer: coarse/.test(dampSrc), 'reduced-motion + coarse');
-check('滚动平滑=速度驱动 + 二阶弹簧阻尼（含限幅与静止阈值）',
-  /OMEGA\s*=\s*[\d.]+/.test(dampSrc) && /ZETA\s*=\s*[\d.]+/.test(dampSrc)
-  && /MAX_OFFSET\s*=\s*\d+/.test(dampSrc)
-  && /REST_X\s*=/.test(dampSrc) && /REST_V\s*=/.test(dampSrc) && /VEL_WIN\s*=\s*\d+/.test(dampSrc)
-  && /requestAnimationFrame/.test(dampSrc), 'ω / ζ / 上限 / 静止阈值 / 速度滑窗 / rAF');
-
 /* 开屏标题「不淡入淡出」：背景层与文字层分层，交接为同位置硬切换 */
 const introSrc = fs.readFileSync(path.join(ROOT, 'src/components/Intro.jsx'), 'utf8');
 check('开屏背景与文字分层（只有背景层渐隐）',
@@ -158,6 +143,32 @@ check('开屏组件在交接帧加 intro-handoff 类',
   /INTRO_HANDOFF_CLASS = 'intro-handoff'/.test(introSrc)
   && /classList\.add\(INTRO_HANDOFF_CLASS\)/.test(introSrc),
   '交接帧 classList.add(INTRO_HANDOFF_CLASS)');
+
+const libDir = path.join(ROOT, 'src/lib');
+const dampSrc = fs.readFileSync(path.join(libDir, 'scrollSmooth.js'), 'utf8');
+const dampCode = dampSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+check('滚动平滑只剩 scrollSmooth.js（旧实现全部删除）',
+  !['smoothScroll.js', 'scrollDamping.js', 'scrollSpring.js'].some((f) => fs.existsSync(path.join(libDir, f))),
+  ['smoothScroll', 'scrollDamping', 'scrollSpring'].filter((f) => fs.existsSync(path.join(libDir, `${f}.js`))).join(',') || '已清空');
+check('主页面滚轮被平滑接管（无级滚动）',
+  /addEventListener\('wheel'/.test(dampCode) && /e\.preventDefault\(\)/.test(dampCode)
+  && /behavior: 'instant'/.test(dampCode),
+  'wheel + preventDefault + instant scrollTo');
+check('抽屉等内部滚动区必须放行（交还原生滚动）',
+  /insideScrollable/.test(dampCode) && /data-native-scroll/.test(dampCode) && /overflowY/.test(dampCode),
+  '可滚动祖先检测 + data-native-scroll');
+check('键盘 / 滚动条 / 锚点等外部滚动会同步（不与动画打架）',
+  /addEventListener\('scroll'/.test(dampCode) && /SYNC_PX\s*=/.test(dampSrc),
+  'scroll 同步 + SYNC_PX');
+check('中部为临界阻尼跟随（ζ=1：只追平、不过冲 → 不回弹）',
+  /a = cfg\.omega \* cfg\.omega \* \(target - cur\) - 2 \* cfg\.omega \* vCur/.test(dampCode),
+  'a = ω²(target−cur) − 2ω·vCur');
+check('回弹只存在于越界（橡皮筋：有上限、松手才弹）',
+  /MAX_RUBBER\s*=\s*\d+/.test(dampSrc) && /RUBBER_ZETA\s*=/.test(dampSrc)
+  && /RELEASE_MS\s*=/.test(dampSrc) && /const beyond = raw - target/.test(dampCode),
+  'MAX_RUBBER + RUBBER_ZETA + RELEASE_MS + beyond');
+check('滚动平滑在减少动效/触摸设备上自动跳过',
+  /prefers-reduced-motion/.test(dampSrc) && /pointer: coarse/.test(dampSrc), 'reduced-motion + coarse');
 
 /* 抽屉开关：Q弹（弹簧过冲进场 / 蓄力甩出退场），退场时长必须与 JS 常量一致 */
 const drawerSrc = fs.readFileSync(path.join(ROOT, 'src/components/Drawers.jsx'), 'utf8');

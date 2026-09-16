@@ -18,7 +18,7 @@ import Calendar from './components/Calendar.jsx';
 import { DetailDrawer, FavoritesDrawer } from './components/Drawers.jsx';
 import { TopBar, About, Footer, Toast } from './components/Layout.jsx';
 import Intro from './components/Intro.jsx';
-import { enableScrollSpring } from './lib/scrollSpring.js';
+import { enableScrollSmooth } from './lib/scrollSmooth.js';
 
 const FAV_KEY = 'spj:favorites:v1';
 
@@ -65,7 +65,7 @@ export default function App() {
 
   /* ── 全局滚动阻尼（原生滚动之上加平滑/惯性，不劫持滚轮）──── */
   const pageRef = useRef(null);
-  useEffect(() => enableScrollSpring(() => pageRef.current), []);
+  useEffect(() => enableScrollSmooth(() => pageRef.current), []);
 
   /* ── 收藏 ─────────────────────────────────────────── */
   useEffect(() => {
@@ -346,7 +346,7 @@ export default function App() {
 
       <TopBar favCount={favs.length} onOpenFav={() => setFavOpen(true)} />
 
-      {/* 页面内容容器：滚动平滑的偏移 transform 只作用在这里（顶栏/抽屉/开屏不受影响） */}
+      {/* 页面内容容器：边缘橡皮筋的 transform 只作用在这里（顶栏/抽屉/开屏不受影响） */}
       <div className="page" ref={pageRef}>
       {/* 页面主色带：当前角色的五个纯色方块 */}
       <div className="colorband" aria-hidden="true">
