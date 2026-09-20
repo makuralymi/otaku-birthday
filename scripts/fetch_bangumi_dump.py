@@ -197,7 +197,9 @@ def norm_gender(raw: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-collects", type=int, default=1, help="角色收藏数下限（Bangumi 站内热度）")
-    ap.add_argument("--max", type=int, default=20000, help="最多导入多少个角色（按收藏数降序）")
+    ap.add_argument("--min-collects-anime", type=int, default=2, help="纯动画/漫画角色收藏数下限")
+    ap.add_argument("--include-anime", action="store_true", default=True, help="包含动画/漫画角色")
+    ap.add_argument("--max", type=int, default=30000, help="最多导入多少个角色（按收藏数降序）")
     ap.add_argument("--gal-game-rank", type=int, default=20000,
                     help="即使收藏数不够，也保留「排名进入前 N 的游戏」里的角色")
     ap.add_argument("--dry-run", action="store_true")
@@ -293,15 +295,28 @@ def main() -> int:
             "staff": 0,
         }
 
-    # ④ 只保留「登场于游戏」的角色（动画/漫画由 AniList 覆盖）
+    # ④ 筛选：保留游戏角色（GalGame/一般游戏），以及热度达标的动画/漫画角色
     picked: list[dict] = []
     for c in chars.values():
-        games = [subjects[sid] for sid, _ in c["subjects"] if sid in subjects and subjects[sid]["is_game"]]
-        if not games:
+        subjs = [subjects[sid] for sid, _ in c["subjects"] if sid in subjects]
+        if not subjs:
             continue
-        games.sort(key=lambda g: (g["rank"] or 999999))
-        best_rank = games[0]["rank"] or 999999
-        qualifies = c["collects"] >= args.min_collects or best_rank <= args.gal_game_rank
+        games = [s for s in subjs if s["is_game"]]
+        has_anime = any(s["type"] == 2 for s in subjs)
+        has_manga = any(s["type"] == 1 for s in subjs)
+        
+        best_rank = 999999
+        qualifies = False
+        if games:
+            games.sort(key=lambda g: (g["rank"] or 999999))
+            best_rank = games[0]["rank"] or 999999
+            qualifies = c["collects"] >= args.min_collects or best_rank <= args.gal_game_rank
+        elif args.include_anime and (has_anime or has_manga):
+            anime_subjs = [s for s in subjs if s["type"] in (1, 2)]
+            anime_subjs.sort(key=lambda a: (a["rank"] or 999999))
+            best_rank = anime_subjs[0]["rank"] or 999999
+            qualifies = c["collects"] >= args.min_collects_anime or best_rank <= args.gal_game_rank
+            
         if not qualifies:
             continue
         c["games"] = games
@@ -311,7 +326,7 @@ def main() -> int:
     picked.sort(key=lambda c: (-c["collects"], c["best_rank"]))
     if args.max and len(picked) > args.max:
         picked = picked[: args.max]
-    log(f"④ 命中「有游戏登场 + 热度达标」的角色 {len(picked)} 个"
+    log(f"④ 命中「登场条目 + 热度达标」的角色 {len(picked)} 个"
         f"（GalGame 作品 {sum(1 for c in picked for g in c['games'] if g['is_gal'])} 次）")
 
     # ⑤ 脚本内去重：同名 + 同生日只留数据最全的一个

@@ -35,8 +35,8 @@ ANILIST_FORMAT_CAT = {
     "VIDEO_GAME": CAT_GAME,
 }
 
-MAX_VNDB_RECORDS = int(os.environ.get("BUILD_MAX_VNDB", "7000"))
-VNDB_MIN_VOTES = int(os.environ.get("BUILD_VNDB_MIN_VOTES", "10"))
+MAX_VNDB_RECORDS = int(os.environ.get("BUILD_MAX_VNDB", "12000"))
+VNDB_MIN_VOTES = int(os.environ.get("BUILD_VNDB_MIN_VOTES", "5"))
 MAX_WORKS = 6
 SUMMARY_LIMIT = 240
 PALETTE_LIMIT = int(os.environ.get("BUILD_PALETTE_LIMIT", "1200"))
@@ -328,11 +328,15 @@ def from_vndb(raw: dict) -> dict:
 
 
 def merge_keys(rec: dict) -> list[str]:
-    """一条记录可能有多个可用名字（日文原名 / 罗马音 / 中文名），任意一个对上就算同一角色。"""
+    """一条记录可能有多个可用名字（日文原名 / 罗马音 / 中文名 / 别名），任意一个对上就算同一角色。"""
     keys = []
     for field in ("name_native", "name_romaji", "name_cn"):
         n = norm_name(rec.get(field))
         if n and len(n) >= 2 and n not in keys:
+            keys.append(n)
+    for alt in (rec.get("alt_names") or [])[:3]:
+        n = norm_name(alt)
+        if n and len(n) >= 3 and n not in keys:
             keys.append(n)
     return keys
 
@@ -356,9 +360,18 @@ def merge_into(base: dict, other: dict) -> dict:
     if not base.get("image") and other.get("image"):
         base["image"] = other["image"]
         base["thumb"] = other.get("thumb") or other["image"]
-    # 中文简介优先，否则保留更长的简介
-    if other.get("summary") and (not base.get("summary") or (other.get("summary_lang") == "zh" and base.get("summary_lang") != "zh")):
-        base["summary"], base["summary_lang"] = other["summary"], other.get("summary_lang", "en")
+    # 中文简介优先，同语言则保留更长的简介
+    b_sum = base.get("summary") or ""
+    o_sum = other.get("summary") or ""
+    b_lang = base.get("summary_lang", "en")
+    o_lang = other.get("summary_lang", "en")
+    if o_sum:
+        if not b_sum:
+            base["summary"], base["summary_lang"] = o_sum, o_lang
+        elif o_lang == "zh" and b_lang != "zh":
+            base["summary"], base["summary_lang"] = o_sum, o_lang
+        elif o_lang == b_lang and len(o_sum) > len(b_sum):
+            base["summary"], base["summary_lang"] = o_sum, o_lang
     for f in ("url_al", "url_vndb", "url_bgm", "bgm_id", "blood", "year"):
         if not base.get(f) and other.get(f):
             base[f] = other[f]
@@ -378,23 +391,38 @@ def merge_into(base: dict, other: dict) -> dict:
 
 
 def dedupe(records: list[dict]) -> tuple[list[dict], int]:
-    """同名 + 同生日判为同一角色；名字的任一写法（原名/罗马音/中文名）命中即合并。"""
+    """同名 + 同生日 或 相同 bgm_id 判为同一角色；名字的任一写法命中即合并。"""
     index: dict[tuple[str, int, int], dict] = {}
+    bgm_index: dict[str, dict] = {}
     out: list[dict] = []
     for rec in records:
-        keys = merge_keys(rec)
+        bgm_id = str(rec.get("bgm_id") or "")
+        if bgm_id.startswith("bgm"):
+            bgm_id = bgm_id[3:]
         hit = None
-        for k in keys:
-            hit = index.get((k, rec["month"], rec["day"]))
-            if hit is not None:
-                break
+        if bgm_id and bgm_id in bgm_index:
+            hit = bgm_index[bgm_id]
+        if hit is None:
+            keys = merge_keys(rec)
+            for k in keys:
+                hit = index.get((k, rec["month"], rec["day"]))
+                if hit is not None:
+                    break
         if hit is not None:
             merged = merge_into(hit, rec)
-            for k in keys:                      # 新出现的写法也指向合并后的记录
-                index[(k, rec["month"], rec["day"])] = merged
+            for k in merge_keys(merged):
+                index[(k, merged["month"], merged["day"])] = merged
+            bid = str(merged.get("bgm_id") or "")
+            if bid.startswith("bgm"):
+                bid = bid[3:]
+            if bid:
+                bgm_index[bid] = merged
             continue
+        keys = merge_keys(rec)
         for k in keys:
             index[(k, rec["month"], rec["day"])] = rec
+        if bgm_id:
+            bgm_index[bgm_id] = rec
         out.append(rec)
     return out, len(records) - len(out)
 

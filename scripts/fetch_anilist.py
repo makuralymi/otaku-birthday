@@ -21,8 +21,8 @@ OUT = os.path.join(RAW, "anilist.jsonl")
 STATE = os.path.join(RAW, ".anilist_state.json")
 
 PAGE_SIZE = 50
-MAX_PAGES = int(os.environ.get("ANILIST_MAX_PAGES", "110"))  # AniList 分页上限 5000 条
-TOP_MEDIA = int(os.environ.get("ANILIST_TOP_MEDIA", "400"))  # 额外抓取的热门作品数量
+MAX_PAGES = int(os.environ.get("ANILIST_MAX_PAGES", "160"))  # AniList 分页上限 5000 条
+TOP_MEDIA = int(os.environ.get("ANILIST_TOP_MEDIA", "600"))  # 额外抓取的热门作品数量
 SLEEP = float(os.environ.get("ANILIST_SLEEP", "1.1"))
 
 CHAR_FIELDS = """

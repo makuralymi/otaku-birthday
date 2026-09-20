@@ -207,8 +207,12 @@ export default function Hero({ meta, month, day, palette, onChange, onPickFeatur
           <span id="hero-title-text">你的生日里，住着哪些角色？</span>
         </h1>
         <p className="hero-lede">
-          收录动画、漫画、轻小说、二次元游戏与 GalGame 角色的官方生日设定。<br />
-          选一个月日，看看与你同一天出生的人都是谁。
+          <span className="hero-lede-text">
+            收录动画、漫画、轻小说、二次元游戏与 GalGame 角色的官方生日设定。选一个月日，看看与你同一天出生的人都是谁。
+          </span>
+          <span className="hero-lede-tip" style={{ color: palette?.accent || 'var(--m-accent)' }}>
+            如有立绘加载失败请切换网络环境后刷新。
+          </span>
         </p>
         <Picker meta={meta} month={month} day={day} onChange={onChange} onToday={onToday} onRandom={onRandom} />
       </div>
