@@ -455,13 +455,15 @@ check('切回 4 月仍然生效', $('#sel-month')?.value === '4', `select=${$('#
 
 /* ── 10.8 页脚项目地址 / 干净构建的外链与分享策略 ───── */
 if (CLEAN) {
-  const extLinks = $$('a').filter((a) => /^https?:/i.test(a.getAttribute('href') || '') && a.id !== 'repo-link');
-  check('干净构建：除页脚项目地址外全站没有任何外链', extLinks.length === 0,
+  const extLinks = $$('a').filter((a) => /^https?:/i.test(a.getAttribute('href') || '') && a.id !== 'repo-link' && a.id !== 'hero-bili-card');
+  check('干净构建：除页脚项目地址与反馈卡片外全站没有任何外链', extLinks.length === 0,
     extLinks.slice(0, 3).map((a) => a.getAttribute('href')).join(' ') || '0 个');
   check('干净构建：没有分享按钮', !$('#btn-share'));
   const repo = $('#repo-link');
   check('干净构建：页脚保留项目地址', !!repo && repo.textContent.includes('项目地址')
     && /^https:\/\/github\.com\//.test(repo.getAttribute('href') || ''), `${repo?.textContent?.trim()} → ${repo?.getAttribute('href')}`);
+  const bili = $('#hero-bili-card');
+  check('干净构建：保留反馈卡片跳转链接', !!bili && bili.getAttribute('href') === 'https://space.bilibili.com/125281372');
   check('干净构建：详情里没有外链区', $$('#drawer-body .link-row a').length === 0);
   const about = $('#about')?.textContent || '';
   check('干净构建：仍标注数据源名称（关于区）',
@@ -483,12 +485,8 @@ check('首屏包含反馈卡片', !!biliCard);
 check('反馈卡片含B站头像', !!biliCard?.querySelector('.bili-avatar-img'));
 check('反馈卡片含小电视图标', !!biliCard?.querySelector('svg path'));
 check('反馈卡片文案完整', biliCard?.textContent.includes('如果出现错误数据或补充条目请联系') && biliCard?.textContent.includes('B站'));
-if (CLEAN) {
-  check('干净构建：反馈卡片非外链a标签', biliCard?.tagName.toLowerCase() !== 'a');
-} else {
-  check('常规构建：反馈卡片链接到B站空间', biliCard?.getAttribute('href') === 'https://space.bilibili.com/125281372');
-  check('常规构建：反馈卡片新标签页安全打开', biliCard?.getAttribute('target') === '_blank' && (biliCard?.getAttribute('rel') || '').includes('noopener'));
-}
+check('反馈卡片链接到B站空间', biliCard?.getAttribute('href') === 'https://space.bilibili.com/125281372');
+check('反馈卡片新标签页安全打开', biliCard?.getAttribute('target') === '_blank' && (biliCard?.getAttribute('rel') || '').includes('noopener'));
 
 /* ── 10.9 跨月搜索（瘦身索引 → 跳转生日页） ────────── */
 setNative($('#sel-month'), '1');

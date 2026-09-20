@@ -282,43 +282,44 @@ a.hero-bili-card:hover .hero-bili-arrow {
 .hero-bili-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  margin-top: 8px;
 }
 .hero-bili-text {
-  font-size: 12px;
-  color: var(--ink-2);
-  line-height: 1.45;
+  font-size: clamp(13.5px, 1.2vw, 15px);
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.5;
   margin: 0;
 }
 .hero-bili-link-text {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 2px 0 0;
+  margin: 0;
   min-width: 0;
 }
 .hero-bili-brand {
   flex-shrink: 0;
-  display: inline-block;
-  padding: 1px 6px;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 12.5px;
   font-weight: 600;
   border-radius: var(--radius-sm);
   background: var(--panel-2);
   border: 1px solid var(--line);
   color: #00aeec;
+  transition: background-color .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease);
+}
+a.hero-bili-card:hover .hero-bili-brand {
+  background: #00aeec;
+  color: #ffffff;
+  border-color: #00aeec;
 }
 .hero-bili-url {
-  font-size: 11px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-a.hero-bili-card:hover .hero-bili-url {
-  color: var(--ink-2);
-  text-decoration: underline;
+  display: none;
 }
 @media (max-width: 900px) {
   .hero-picker-wrap {

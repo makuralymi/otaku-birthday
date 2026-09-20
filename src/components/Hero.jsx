@@ -222,7 +222,6 @@ function FeedbackCard() {
         <p className="hero-bili-text">如果出现错误数据或补充条目请联系：</p>
         <p className="hero-bili-link-text">
           <span className="hero-bili-brand">B站</span>
-          <span className="hero-bili-url">{BILI_URL}</span>
         </p>
       </div>
     </>
@@ -230,22 +229,16 @@ function FeedbackCard() {
 
   return (
     <aside className="hero-aside" aria-label="数据反馈与补充">
-      {CLEAN_BUILD ? (
-        <div className="hero-bili-card" id="hero-bili-card" role="region" aria-label="数据反馈与补充">
-          {cardBody}
-        </div>
-      ) : (
-        <a
-          className="hero-bili-card"
-          id="hero-bili-card"
-          href={BILI_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="如果出现错误数据或补充条目请联系：B站"
-        >
-          {cardBody}
-        </a>
-      )}
+      <a
+        className="hero-bili-card"
+        id="hero-bili-card"
+        href={BILI_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="如果出现错误数据或补充条目请联系：B站"
+      >
+        {cardBody}
+      </a>
     </aside>
   );
 }
