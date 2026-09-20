@@ -2,6 +2,7 @@
    Layout.jsx · 顶栏 / 关于 / 页脚 / 轻提示
    ============================================================ */
 
+import { useEffect, useRef, useState } from 'react';
 import { SRC_LABEL } from '../lib/data.js';
 import { CLEAN_BUILD } from '../lib/buildflags.js';
 
@@ -117,3 +118,111 @@ export function Footer() {
 export function Toast({ message }) {
   return <div className={`toast${message ? ' show' : ''}`} id="toast" role="status" aria-live="polite">{message}</div>;
 }
+
+/** 回到顶部悬浮按钮 */
+export function BackToTop() {
+  const [status, setStatus] = useState('hidden'); // 'hidden' | 'visible' | 'exiting'
+  const statusRef = useRef('hidden');
+  statusRef.current = status;
+  const exitTimerRef = useRef(null);
+  const scrollingToTopRef = useRef(false);
+
+  const startExit = () => {
+    // 只有在当前处于 visible 状态时才允许进入 exiting
+    // 处于 hidden 或已经处于 exiting 时严禁重复触发，彻底杜绝位移动画播放两次及顶部轻微滚动重复触发
+    if (statusRef.current === 'visible') {
+      statusRef.current = 'exiting';
+      setStatus('exiting');
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = setTimeout(() => {
+        if (statusRef.current === 'exiting') {
+          statusRef.current = 'hidden';
+          setStatus('hidden');
+        }
+      }, 1000);
+    }
+  };
+
+  const show = () => {
+    // 若正在点击回到顶部滑行期间，不重新唤醒按钮
+    if (scrollingToTopRef.current) return;
+    if (exitTimerRef.current) {
+      clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = null;
+    }
+    if (statusRef.current !== 'visible') {
+      statusRef.current = 'visible';
+      setStatus('visible');
+    }
+  };
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      if (y <= 40) {
+        scrollingToTopRef.current = false;
+      }
+      if (y > 320) {
+        show();
+      } else if (y <= 240) {
+        startExit();
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    };
+  }, []);
+
+  const scrollToTop = () => {
+    scrollingToTopRef.current = true;
+    startExit();
+    if (window.__lenis && typeof window.__lenis.scrollTo === 'function') {
+      window.__lenis.scrollTo(0);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const isVisible = status === 'visible';
+  const isExiting = status === 'exiting';
+
+  return (
+    <button
+      className={`back-to-top${isVisible ? ' visible' : ''}${isExiting ? ' exiting' : ''}`}
+      id="btn-back-to-top"
+      type="button"
+      onClick={scrollToTop}
+      onAnimationEnd={(e) => {
+        if (e.animationName === 'back-to-top-exit') {
+          if (exitTimerRef.current) {
+            clearTimeout(exitTimerRef.current);
+            exitTimerRef.current = null;
+          }
+          statusRef.current = 'hidden';
+          setStatus('hidden');
+        }
+      }}
+      aria-label="回到顶部"
+      title="回到顶部"
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          fillRule="evenodd"
+          d="M10 3a1 1 0 0 1 .707.293l6 6a1 1 0 0 1-1.414 1.414L11 6.414V16a1 1 0 1 1-2 0V6.414L4.707 10.707a1 1 0 0 1-1.414-1.414l6-6A1 1 0 0 1 10 3Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </button>
+  );
+}
+

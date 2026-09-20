@@ -16,7 +16,7 @@ import Hero, { PaletteBlocks } from './components/Hero.jsx';
 import Results from './components/Results.jsx';
 import Calendar from './components/Calendar.jsx';
 import { DetailDrawer, FavoritesDrawer } from './components/Drawers.jsx';
-import { TopBar, About, Footer, Toast } from './components/Layout.jsx';
+import { TopBar, About, Footer, Toast, BackToTop } from './components/Layout.jsx';
 import Intro from './components/Intro.jsx';
 import { enableSmoothScroll } from './lib/lenisScroll.js';
 
@@ -148,8 +148,24 @@ export default function App() {
     setPagePalette(palette || cachedCardPalette(char.id) || quickPalette(char));
   }, []);
 
+const SEARCH_ALIASES = {
+  '鸣朝': ['鸣朝', '鸣潮', 'wuthering waves'],
+  '鸣潮': ['鸣潮', '鸣朝', 'wuthering waves'],
+  '星铁': ['星铁', '崩铁', '崩坏：星穹铁道', '星穹铁道', 'star rail'],
+  '崩铁': ['崩铁', '星铁', '崩坏：星穹铁道', '星穹铁道', 'star rail'],
+  '星穹铁道': ['星穹铁道', '崩坏：星穹铁道', '星铁', '崩铁'],
+  '崩坏3': ['崩坏3', '崩坏三', '崩3', '战乙女的餐桌', '女武神的餐桌', 'honkai impact 3rd'],
+  '崩坏三': ['崩坏3', '崩坏三', '崩3', 'honkai impact 3rd'],
+  '崩3': ['崩坏3', '崩坏三', '崩3', 'honkai impact 3rd'],
+  '1999': ['重返未来：1999', '重返未来1999', '1999'],
+  '方舟': ['明日方舟', 'arknights', '方舟'],
+  '舟游': ['明日方舟', '方舟'],
+  '马小芳': ['炽霞', '马小芳'],
+  '元武': ['元武', '渊武'],
+};
+
   /* ── 过滤 + 排序 ──────────────────────────────────── */
-  const baseRows = mode === 'search' && allRows ? allRows : rows;
+  const baseRows = mode === 'search' && allRows && query.trim() ? allRows : rows;
 
   const filtered = useMemo(() => {
     let list = baseRows.slice();
@@ -157,8 +173,12 @@ export default function App() {
     if (!nsfw) list = list.filter((r) => !r.nsfw);
     const q = query.trim().toLowerCase();
     if (q) {
-      list = list.filter((r) => [r.nameCn, r.nameNative, r.nameRomaji, r.altNames, r.work, r.workCn, r.summary]
-        .join(' ').toLowerCase().includes(q));
+      const terms = SEARCH_ALIASES[q] ? SEARCH_ALIASES[q].map((t) => t.toLowerCase()) : [q];
+      list = list.filter((r) => {
+        const haystack = [r.nameCn, r.nameNative, r.nameRomaji, r.altNames, r.work, r.workCn, r.summary]
+          .join(' ').toLowerCase();
+        return terms.some((term) => haystack.includes(term));
+      });
     }
     const sorters = {
       heat: (a, b) => b.heat - a.heat || a.nameRomaji.localeCompare(b.nameRomaji),
@@ -282,11 +302,16 @@ export default function App() {
     const all = await loadIndex();
     setProgress?.(1);
     setAllRows(all);
-    setMode('search');
+    const isSearch = Boolean(query.trim());
+    setMode(isSearch ? 'search' : 'day');
     const url = new URL(location.href);
-    url.searchParams.set('mode', 'search');
+    if (isSearch) {
+      url.searchParams.set('mode', 'search');
+    } else {
+      url.searchParams.delete('mode');
+    }
     history.replaceState({}, '', url);
-  }, []);
+  }, [query]);
 
   const exportRows = (list, filename) => {
     if (!list.length) { notify('没有可导出的角色'); return; }
@@ -333,9 +358,9 @@ export default function App() {
       mountImage,
       loadedRouteOf,
       quickPalette,
-      getState: () => ({ month, day, rows, filtered, meta, mode, favs, selected }),
+      getState: () => ({ month, day, rows, filtered, meta, mode, favs, selected, allRows, query }),
     };
-  }, [selectDate, openDrawer, closeDrawer, month, day, rows, filtered, meta, mode, favs, selected, selectedId]);
+  }, [selectDate, openDrawer, closeDrawer, month, day, rows, filtered, meta, mode, favs, selected, selectedId, allRows, query]);
 
   const heroPalette = pagePalette || (rows.length ? quickPalette(rows[0]) : null);
 
@@ -368,7 +393,7 @@ export default function App() {
           month={month}
           day={day}
           rows={rows}
-          totalOfDay={mode === 'search' && allRows ? allRows.length : rows.length}
+          totalOfDay={mode === 'search' && allRows && query.trim() ? allRows.length : rows.length}
           baseRows={baseRows}
           filtered={filtered}
           meta={meta}
@@ -376,7 +401,25 @@ export default function App() {
           favIds={favIds}
           filters={{ q: query, sort, types, nsfw }}
           onFilterChange={(patch) => {
-            if ('q' in patch) { setQuery(patch.q); if (!(mode === 'search' && allRows)) setMode('day'); }
+            if ('q' in patch) {
+              const nextQ = patch.q;
+              setQuery(nextQ);
+              const trimmed = nextQ.trim();
+              const url = new URL(location.href);
+              if (!trimmed) {
+                // 搜索框为空时默认回到当前选择的日期中加载，防止卡顿
+                setMode('day');
+                url.searchParams.delete('mode');
+                history.replaceState({}, '', url);
+              } else if (allRows) {
+                // 已加载过全年数据时，修改关键词继续在全部中搜索
+                setMode('search');
+                url.searchParams.set('mode', 'search');
+                history.replaceState({}, '', url);
+              } else {
+                setMode('day');
+              }
+            }
             if ('sort' in patch) setSort(patch.sort);
             if ('types' in patch) setTypes(patch.types);
             if ('nsfw' in patch) setNsfw(patch.nsfw);
@@ -388,7 +431,14 @@ export default function App() {
           onExport={() => exportRows(filtered, exportName(mode, month, day, query))}
           onShare={share}
           onGlobalSearch={globalSearch}
-          onReset={() => { setTypes([]); setQuery(''); }}
+          onReset={() => {
+            setTypes([]);
+            setQuery('');
+            setMode('day');
+            const url = new URL(location.href);
+            url.searchParams.delete('mode');
+            history.replaceState({}, '', url);
+          }}
           onRandom={randomDay}
           onNear={nearDay}
         />
@@ -438,6 +488,7 @@ export default function App() {
       ) : null}
 
       <Toast message={toast} />
+      <BackToTop />
     </>
   );
 }

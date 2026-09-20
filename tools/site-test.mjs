@@ -526,6 +526,51 @@ if (globalBtn) {
   check('跳转后拿到完整记录（含简介）', true, '跳过');
 }
 
+/* ── 10.92 新二游检索与鸣潮数据增补 ──────────────────── */
+// 在全局搜索模式下验证
+setNative($('#q'), '鸣朝');
+await wait(200);
+let globalSearchBtn = [...$$('#empty button')].find((b) => b.textContent.includes('全年数据'));
+if (globalSearchBtn) {
+  globalSearchBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await until(() => ($('#date-label')?.textContent || '').includes('搜索结果'), 20000);
+}
+const mingchaoCards = stateOf().filtered;
+check('搜索错别字「鸣朝」能够自动匹配《鸣潮》角色', mingchaoCards.length >= 20, `${mingchaoCards.length} 位角色`);
+
+// 验证炽霞主名与别名
+const chixia = mingchaoCards.find((c) => (c.nameCn === '炽霞' || c.nameNative === '炽霞') && (c.workCn === '鸣潮' || c.work === '鸣潮'));
+check('炽霞主展示名正确且包含马小芳别名', !!chixia && chixia.nameCn === '炽霞' && chixia.altNames.includes('马小芳'));
+
+// 验证崩坏3核心角色检索
+setNative($('#q'), '崩坏3');
+await wait(100);
+const bh3Cards = stateOf().filtered;
+check('搜索「崩坏3」能够检索出核心角色群', bh3Cards.length >= 5, `${bh3Cards.length} 位角色`);
+
+// 验证 12月10日 包含新角色「椿」
+setNative($('#q'), '椿');
+await wait(100);
+const tsubaki = stateOf().filtered.find((c) => (c.nameCn === '椿' || c.nameNative === '椿') && (c.workCn === '鸣潮' || c.work === '鸣潮'));
+check('12月10日成功收录鸣潮角色「椿」', !!tsubaki && tsubaki.month === 12 && tsubaki.day === 10, `${tsubaki?.month}/${tsubaki?.day}`);
+
+// 还原搜索框：验证输入框清空时自动恢复当天模式，防止加载全量数据导致卡顿
+setNative($('#q'), '');
+await wait(60);
+check('搜索框清空时自动退回当前日期模式（防卡顿）', stateOf().mode === 'day', stateOf().mode);
+check('搜索框清空时不再渲染全量角色', stateOf().filtered.length === stateOf().rows.length && stateOf().filtered.length < 1000, `${stateOf().filtered.length} 张`);
+check('搜索框清空时 URL 清除 mode=search', !new URL(window.location.href).searchParams.has('mode'));
+
+// 验证重新输入关键词时继续在全年数据中搜索
+setNative($('#q'), '鸣朝');
+await wait(100);
+check('重新输入非空词时继续在全年数据中搜索', stateOf().mode === 'search' && stateOf().filtered.length >= 20, `${stateOf().filtered.length} 位`);
+
+// 再次还原搜索框
+setNative($('#q'), '');
+await wait(60);
+check('再次清空搜索框仍然稳妥切回当前日期', stateOf().mode === 'day' && stateOf().filtered.length === stateOf().rows.length);
+
 /* ── 10.95 首屏随机预览（每次打开随机 + 换一批） ───── */
 const galleryItems = () => $$('#gallery .gallery-item').map((el) => el.getAttribute('title') || '');
 const firstBatch = galleryItems();
@@ -579,6 +624,73 @@ check('关于区只保留两个区块', $$('#about .about-grid article').length 
 check('已移除「立绘是怎么取色的」', !aboutText.includes('立绘是怎么取色的'));
 check('已移除「立绘是怎么调取的」', !aboutText.includes('立绘是怎么调取的'));
 check('保留数据来源署名', aboutText.includes('数据来源') && aboutText.includes('AniList'));
+
+/* ── 10.98 回到顶部按钮 ──────────────────────────────── */
+const backToTopBtn = $('#btn-back-to-top');
+check('回到顶部按钮已渲染', !!backToTopBtn, 'id="btn-back-to-top"');
+check('回到顶部按钮带无障碍属性与图标',
+  backToTopBtn?.getAttribute('aria-label') === '回到顶部' &&
+  !!backToTopBtn?.querySelector('svg'));
+check('顶部状态下回到顶部按钮处于隐蔽态',
+  !backToTopBtn?.classList.contains('visible'));
+
+window.scrollY = 600;
+window.dispatchEvent(new window.Event('scroll'));
+await wait(60);
+check('滚动至下方后回到顶部按钮变为可见态',
+  backToTopBtn?.classList.contains('visible'));
+
+let scrollToCalled = false;
+if (window.__lenis) {
+  const origLenisScroll = window.__lenis.scrollTo;
+  window.__lenis.scrollTo = (t) => { if (t === 0) scrollToCalled = true; };
+  backToTopBtn?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  window.__lenis.scrollTo = origLenisScroll;
+} else {
+  const origScrollTo = window.scrollTo;
+  window.scrollTo = (opt) => { if (opt?.top === 0) scrollToCalled = true; };
+  backToTopBtn?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  window.scrollTo = origScrollTo;
+}
+check('点击回到顶部按钮触发平滑回到顶部', scrollToCalled);
+
+// 滚动回顶部触发先顺时针旋转90°再向右加速消失
+window.scrollY = 0;
+window.dispatchEvent(new window.Event('scroll'));
+await wait(60);
+check('滚动回顶部触发 exiting 退场状态',
+  backToTopBtn?.classList.contains('exiting') && !backToTopBtn?.classList.contains('visible'));
+check('退场关键帧包含90°顺时针旋转与加速度位移',
+  /@keyframes back-to-top-exit/.test(cssSrc)
+  && /rotate\(90deg\)/.test(cssSrc)
+  && /translate3d\(100px/.test(cssSrc)
+  && /cubic-bezier\(0\.55/.test(cssSrc));
+
+// 动画播放结束后重置状态
+const animEvt = new window.Event('animationend', { bubbles: true });
+animEvt.animationName = 'back-to-top-exit';
+backToTopBtn?.dispatchEvent(animEvt);
+await wait(60);
+check('退场动画播放完毕后退出 exiting 态', !backToTopBtn?.classList.contains('exiting'));
+
+// 在顶部进行轻微滚动（例如从 0 滚到 50 再滚回 0），必须保持静止隐蔽，绝不重新触发 exiting 或重复播放动画
+window.scrollY = 50;
+window.dispatchEvent(new window.Event('scroll'));
+await wait(60);
+check('在顶部轻微滚动时不重新触发退场动画',
+  !backToTopBtn?.classList.contains('exiting') && !backToTopBtn?.classList.contains('visible'));
+
+window.scrollY = 0;
+window.dispatchEvent(new window.Event('scroll'));
+await wait(60);
+check('顶部回滚微抖动保持静止隐蔽',
+  !backToTopBtn?.classList.contains('exiting') && !backToTopBtn?.classList.contains('visible'));
+
+// 再次向下深滚超过 320px 重新进入可见态
+window.scrollY = 450;
+window.dispatchEvent(new window.Event('scroll'));
+await wait(60);
+check('再次向下滚动超过320px重新进入可见态', backToTopBtn?.classList.contains('visible'));
 
 /* ── 11. 无 JS 报错 ────────────────────────────────── */
 const realErrors = errors.filter((e) => !/navigation to another Document|Not implemented/.test(e));
