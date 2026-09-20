@@ -455,11 +455,13 @@ check('切回 4 月仍然生效', $('#sel-month')?.value === '4', `select=${$('#
 
 /* ── 10.8 页脚项目地址 / 干净构建的外链与分享策略 ───── */
 if (CLEAN) {
-  const extLinks = $$('a').filter((a) => /^https?:/i.test(a.getAttribute('href') || ''));
-  check('干净构建：全站没有任何外链', extLinks.length === 0,
+  const extLinks = $$('a').filter((a) => /^https?:/i.test(a.getAttribute('href') || '') && a.id !== 'repo-link');
+  check('干净构建：除页脚项目地址外全站没有任何外链', extLinks.length === 0,
     extLinks.slice(0, 3).map((a) => a.getAttribute('href')).join(' ') || '0 个');
   check('干净构建：没有分享按钮', !$('#btn-share'));
-  check('干净构建：页脚没有项目地址', !$('#repo-link'));
+  const repo = $('#repo-link');
+  check('干净构建：页脚保留项目地址', !!repo && repo.textContent.includes('项目地址')
+    && /^https:\/\/github\.com\//.test(repo.getAttribute('href') || ''), `${repo?.textContent?.trim()} → ${repo?.getAttribute('href')}`);
   check('干净构建：详情里没有外链区', $$('#drawer-body .link-row a').length === 0);
   const about = $('#about')?.textContent || '';
   check('干净构建：仍标注数据源名称（关于区）',

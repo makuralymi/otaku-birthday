@@ -26,10 +26,14 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:clean": "node tools/dev-clean.mjs",
     "build": "vite build",
     "build:clean": "node tools/build-clean.mjs",
     "preview": "vite preview --port 4173",
-    "test": "node tools/make-test-bundle.mjs && node tools/site-test.mjs"
+    "preview:clean": "vite preview --outDir dist-clean --port 4173",
+    "test": "node tools/make-test-bundle.mjs && node tools/site-test.mjs",
+    "test:clean": "node tools/test-clean.mjs",
+    "test:all": "npm run test && npm run test:clean"
   },
   "dependencies": {
     "lenis": "^1.3.26",

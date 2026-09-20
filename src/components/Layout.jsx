@@ -106,12 +106,10 @@ export function Footer() {
   return (
     <footer className="footer">
       <p>生诞绘卷 · 非商业同人项目 · 数据来自 AniList / Bangumi / VNDB · 角色与作品版权归各自权利人所有</p>
-      {CLEAN_BUILD ? null : (
-        <a className="repo-link" id="repo-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">
-          <GitHubIcon />
-          <span>项目地址</span>
-        </a>
-      )}
+      <a className="repo-link" id="repo-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+        <GitHubIcon />
+        <span>项目地址</span>
+      </a>
     </footer>
   );
 }

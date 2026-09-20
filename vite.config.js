@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // 干净构建（CLEAN=1）：
-//   · 去掉所有指向站外的链接（条目外链、数据源链接、项目地址）
+//   · 去掉条目外链与数据源链接，保留底部的 GitHub 项目地址链接
 //   · 去掉分享功能（分享按钮、复制分享链接、复制色值的分享语义保留但不再有分享入口）
 //   · 产物输出到 dist-clean/，与常规构建并存
 // 可选：LOCAL_IMAGES_ONLY=1 时连立绘也不走外站（只用本地图缓存，其余用纯色占位卡）

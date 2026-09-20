@@ -33,9 +33,14 @@
 ```bash
 npm install          # 安装依赖（react / vite）
 npm run dev          # 开发服务器 http://127.0.0.1:5173
+npm run dev:clean    # 干净模式（CLEAN=1）本地开发调试 http://127.0.0.1:5173
 npm run build        # 产出 dist/（含 public/ 下的数据与图片缓存）
-npm run preview      # 本地预览构建产物 http://127.0.0.1:4173
-npm test             # jsdom 自测：120 项断言
+npm run build:clean  # 产出 dist-clean/（干净版本）
+npm run preview      # 本地预览常规构建产物 http://127.0.0.1:4173
+npm run preview:clean# 本地预览干净构建产物 dist-clean
+npm test             # jsdom 自测常规档：120 项断言
+npm run test:clean   # jsdom 自测干净档：118 项断言
+npm run test:all     # 一键运行全部自测（常规 + 干净档）
 ```
 
 部署：`npm run build` 后把 `dist/` 丢给任意静态服务器（Nginx / GitHub Pages / Vercel 都行）。
@@ -45,7 +50,7 @@ npm test             # jsdom 自测：120 项断言
 | 命令 | 产物 | 特点 |
 | --- | --- | --- |
 | `npm run build` | `dist/` | 常规版：带条目外链（AniList / Bangumi / VNDB / 萌百 / Google）、分享按钮、页脚项目地址 |
-| `npm run build:clean` | `dist-clean/` | **无外链、无分享**：去掉全站所有站外链接与分享入口，数据源仍以文字署名（适合不允许外链的平台） |
+| `npm run build:clean` | `dist-clean/` | **去条目外链、无分享**：去掉条目外链、数据源外链与分享入口（保留页脚 GitHub 项目地址），数据源仍以文字署名 |
 | `LOCAL_IMAGES_ONLY=1 OUT_DIR=dist-clean-offline npm run build:clean` | `dist-clean-offline/` | 在上一档基础上**连立绘也不请求站外**：只用本地图缓存（`cache_images.py` 生成的 `img/cache/*`），没有缓存的角色显示纯色占位卡；`index.html` 里的 preconnect/dns-prefetch 也会被移除 |
 
 干净档具体去掉了什么：
@@ -53,14 +58,14 @@ npm test             # jsdom 自测：120 项断言
 - 详情抽屉的「查看来源」外链区（AniList / Bangumi / VNDB / 萌娘百科搜索 / Google）
 - 「关于」区数据源名称上的超链接（**名称保留**，署名不丢）
 - 列表页的「分享」按钮、详情页的「复制分享链接」按钮
-- 页脚的「项目地址」（GitHub 图标 + 链接）
 - 站外图片请求（仅 `LOCAL_IMAGES_ONLY=1` 时；含首屏人气预览、收藏夹缩略图、抽屉大图）
 
 自测覆盖两种模式：
 
 ```bash
-npm test            # 常规档：120 项
-CLEAN=1 npm test    # 干净档：118 项（断言「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm test            # 常规档：120 项断言
+npm run test:clean  # 干净档：118 项断言（断言除页脚 GitHub 外「全站 0 个外链」「没有分享按钮」「仍标注数据源」等）
+npm run test:all    # 完整自测：常规 + 干净档两套全部跑完
 ```
 
 ## 部署（Cloudflare Pages / Netlify / Vercel / Nginx）
