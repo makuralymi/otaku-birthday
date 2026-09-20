@@ -149,7 +149,7 @@ main { display: block; }
   margin: 0 auto;
   padding: clamp(32px, 5vw, 64px) clamp(20px, 4vw, 56px) clamp(20px, 3vw, 32px);
 }
-.hero-main { max-width: 880px; }
+.hero-main { max-width: 1040px; }
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
   margin: 0 0 16px;
@@ -175,7 +175,160 @@ main { display: block; }
   color: var(--m-accent);
   transition: color .4s var(--ease);
 }
-.hero-blocks { margin: 28px 0 24px; max-width: 720px; }
+.hero-blocks { margin: 28px 0 24px; max-width: 1040px; }
+
+/* ── 选择器与反馈卡片 ─────────────────────────────────── */
+.hero-picker-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  max-width: 1040px;
+}
+.hero-picker-wrap .picker {
+  flex: 1 1 540px;
+  max-width: none;
+}
+.hero-aside {
+  flex: 0 1 310px;
+  min-width: 270px;
+  display: flex;
+}
+.hero-bili-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: clamp(14px, 1.8vw, 18px);
+  text-decoration: none;
+  color: var(--ink);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color .2s var(--ease), background-color .2s var(--ease), transform .2s var(--ease);
+}
+div.hero-bili-card {
+  cursor: default;
+}
+a.hero-bili-card:hover, a.hero-bili-card:focus-visible {
+  border-color: var(--m-accent, #00aeec);
+  background: var(--panel-2);
+  transform: translateY(-2px);
+}
+.hero-bili-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.hero-bili-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-bili-avatar-wrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+}
+.bili-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.hero-bili-icon-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #00aeec;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--panel);
+}
+.hero-bili-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hero-bili-tag {
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--ink-3);
+}
+.hero-bili-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.hero-bili-arrow {
+  font-size: 15px;
+  color: var(--ink-3);
+  transition: transform .2s var(--ease), color .2s var(--ease);
+}
+a.hero-bili-card:hover .hero-bili-arrow {
+  color: var(--m-accent, #00aeec);
+  transform: translate(2px, -2px);
+}
+.hero-bili-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hero-bili-text {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.45;
+  margin: 0;
+}
+.hero-bili-link-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  min-width: 0;
+}
+.hero-bili-brand {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: #00aeec;
+}
+.hero-bili-url {
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+a.hero-bili-card:hover .hero-bili-url {
+  color: var(--ink-2);
+  text-decoration: underline;
+}
+@media (max-width: 900px) {
+  .hero-picker-wrap {
+    flex-direction: column;
+  }
+  .hero-aside {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
 
 /* ── 选择器 ───────────────────────────────────────────── */
 .picker {
@@ -666,6 +819,7 @@ body.intro-pending:not(.page-ready) .topbar,
 body.intro-pending:not(.page-ready) .hero-title,
 body.intro-pending:not(.page-ready) .hero-lede,
 body.intro-pending:not(.page-ready) .picker,
+body.intro-pending:not(.page-ready) .hero-aside,
 body.intro-pending:not(.page-ready) .gallery-block,
 body.intro-pending:not(.page-ready) section.results,
 body.intro-pending:not(.page-ready) section.calendar-section,
@@ -674,6 +828,7 @@ body.intro-pending:not(.page-ready) section.about {
 }
 body.intro-pending:not(.page-ready) .hero-lede,
 body.intro-pending:not(.page-ready) .picker,
+body.intro-pending:not(.page-ready) .hero-aside,
 body.intro-pending:not(.page-ready) .gallery-block,
 body.intro-pending:not(.page-ready) section.results,
 body.intro-pending:not(.page-ready) section.calendar-section,
@@ -687,6 +842,7 @@ body:not(.intro-handoff) .hero-title { opacity: 0; }
 body.intro-handoff .hero-title { opacity: 1; }
 body.page-ready .hero-lede { transition: opacity .5s var(--ease) .14s, transform .5s var(--ease) .14s; }
 body.page-ready .picker { transition: opacity .55s var(--ease) .22s, transform .55s var(--ease) .22s; }
+body.page-ready .hero-aside { transition: opacity .55s var(--ease) .26s, transform .55s var(--ease) .26s; }
 body.page-ready .gallery-block { transition: opacity .55s var(--ease) .32s, transform .55s var(--ease) .32s; }
 body.page-ready .topbar { transition: opacity .5s var(--ease) .36s, background-color .5s var(--ease); }
 body.page-ready section.results,
@@ -695,6 +851,7 @@ body.page-ready section.about { transition: opacity .7s var(--ease) .44s, transf
 body.page-ready .topbar,
 body.page-ready .hero-lede,
 body.page-ready .picker,
+body.page-ready .hero-aside,
 body.page-ready .gallery-block,
 body.page-ready section.results,
 body.page-ready section.calendar-section,

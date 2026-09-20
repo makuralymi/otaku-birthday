@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { daysInMonth, monthName } from '../lib/data.js';
 import { flatPalette, parsePalette, hashColors } from '../lib/palette.js';
 import { placeholderURI } from '../lib/images.js';
-import { LOCAL_IMAGES_ONLY } from '../lib/buildflags.js';
+import { CLEAN_BUILD, LOCAL_IMAGES_ONLY } from '../lib/buildflags.js';
 
 /** 色板条：5 个纯色方块，跟随当前角色/当天主色 */
 export function PaletteBlocks({ palette, height = 10, className = '' }) {
@@ -185,6 +185,71 @@ function Gallery({ featured, onPick }) {
   );
 }
 
+const BILI_URL = 'https://space.bilibili.com/125281372';
+const BILI_ICON_PATH =
+  'M3.73252 2.67094C3.33229 2.28484 3.33229 1.64373 3.73252 1.25764C4.11291 0.890684 4.71552 0.890684 5.09591 1.25764L7.21723 3.30403C7.27749 3.36218 7.32869 3.4261 7.37081 3.49407H10.5789C10.6211 3.4261 10.6723 3.36218 10.7325 3.30403L12.8538 1.25764C13.2342 0.890684 13.8368 0.890684 14.2172 1.25764C14.6175 1.64373 14.6175 2.28484 14.2172 2.67094L13.364 3.49407H14C16.2091 3.49407 18 5.28493 18 7.49407V12.9996C18 15.2087 16.2091 16.9996 14 16.9996H4C1.79086 16.9996 0 15.2087 0 12.9996V7.49406C0 5.28492 1.79086 3.49407 4 3.49407H4.58579L3.73252 2.67094ZM4 5.42343C2.89543 5.42343 2 6.31886 2 7.42343V13.0702C2 14.1748 2.89543 15.0702 4 15.0702H14C15.1046 15.0702 16 14.1748 16 13.0702V7.42343C16 6.31886 15.1046 5.42343 14 5.42343H4ZM5 9.31747C5 8.76519 5.44772 8.31747 6 8.31747C6.55228 8.31747 7 8.76519 7 9.31747V10.2115C7 10.7638 6.55228 11.2115 6 11.2115C5.44772 11.2115 5 10.7638 5 10.2115V9.31747ZM12 8.31747C11.4477 8.31747 11 8.76519 11 9.31747V10.2115C11 10.7638 11.4477 11.2115 12 11.2115C12.5523 11.2115 13 10.7638 13 10.2115V9.31747C13 8.76519 12.5523 8.31747 12 8.31747Z';
+
+/** B站数据反馈 & 条目补充卡片组（位于选择器右侧） */
+function FeedbackCard() {
+  const cardBody = (
+    <>
+      <div className="hero-bili-head">
+        <div className="hero-bili-user">
+          <div className="hero-bili-avatar-wrap">
+            <img
+              className="bili-avatar-img bili-avatar-face bili-avatar-img-radius"
+              data-src="//i2.hdslb.com/bfs/face/c7001bec1993f615bc00a1dd3bba70c6776e4851.jpg@240w_240h_1c_1s_!web-avatar-nav.avif"
+              src="//i2.hdslb.com/bfs/face/c7001bec1993f615bc00a1dd3bba70c6776e4851.jpg@240w_240h_1c_1s_!web-avatar-nav.avif"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+            />
+            <span className="hero-bili-icon-badge" aria-hidden="true">
+              <svg viewBox="0 0 18 18" width="11" height="11" fill="currentColor">
+                <path d={BILI_ICON_PATH} />
+              </svg>
+            </span>
+          </div>
+          <div className="hero-bili-meta">
+            <span className="hero-bili-tag">勘误 · 补充</span>
+            <span className="hero-bili-title">哔哩哔哩凉言makura</span>
+          </div>
+        </div>
+        <span className="hero-bili-arrow" aria-hidden="true">↗</span>
+      </div>
+      <div className="hero-bili-body">
+        <p className="hero-bili-text">如果出现错误数据或补充条目请联系：</p>
+        <p className="hero-bili-link-text">
+          <span className="hero-bili-brand">B站</span>
+          <span className="hero-bili-url">{BILI_URL}</span>
+        </p>
+      </div>
+    </>
+  );
+
+  return (
+    <aside className="hero-aside" aria-label="数据反馈与补充">
+      {CLEAN_BUILD ? (
+        <div className="hero-bili-card" id="hero-bili-card" role="region" aria-label="数据反馈与补充">
+          {cardBody}
+        </div>
+      ) : (
+        <a
+          className="hero-bili-card"
+          id="hero-bili-card"
+          href={BILI_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="如果出现错误数据或补充条目请联系：B站"
+        >
+          {cardBody}
+        </a>
+      )}
+    </aside>
+  );
+}
+
 export default function Hero({ meta, month, day, palette, onChange, onPickFeatured }) {
   const onToday = () => {
     const now = new Date();
@@ -214,7 +279,10 @@ export default function Hero({ meta, month, day, palette, onChange, onPickFeatur
             如有立绘加载失败请切换网络环境后刷新。
           </span>
         </p>
-        <Picker meta={meta} month={month} day={day} onChange={onChange} onToday={onToday} onRandom={onRandom} />
+        <div className="hero-picker-wrap">
+          <Picker meta={meta} month={month} day={day} onChange={onChange} onToday={onToday} onRandom={onRandom} />
+          <FeedbackCard />
+        </div>
       </div>
       <PaletteBlocks palette={palette} height={12} className="hero-blocks" />
       <Gallery featured={meta?.featured} onPick={onPickFeatured} />

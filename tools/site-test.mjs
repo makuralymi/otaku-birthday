@@ -477,6 +477,19 @@ if (CLEAN) {
   check('常规构建：页脚有站外链接', $$('a[href^="http"]').length >= 1, `${$$('a[href^="http"]').length} 个`);
 }
 
+/* ── 10.85 首屏选择器右侧反馈卡片 ───────────────────── */
+const biliCard = $('#hero-bili-card');
+check('首屏包含反馈卡片', !!biliCard);
+check('反馈卡片含B站头像', !!biliCard?.querySelector('.bili-avatar-img'));
+check('反馈卡片含小电视图标', !!biliCard?.querySelector('svg path'));
+check('反馈卡片文案完整', biliCard?.textContent.includes('如果出现错误数据或补充条目请联系') && biliCard?.textContent.includes('B站'));
+if (CLEAN) {
+  check('干净构建：反馈卡片非外链a标签', biliCard?.tagName.toLowerCase() !== 'a');
+} else {
+  check('常规构建：反馈卡片链接到B站空间', biliCard?.getAttribute('href') === 'https://space.bilibili.com/125281372');
+  check('常规构建：反馈卡片新标签页安全打开', biliCard?.getAttribute('target') === '_blank' && (biliCard?.getAttribute('rel') || '').includes('noopener'));
+}
+
 /* ── 10.9 跨月搜索（瘦身索引 → 跳转生日页） ────────── */
 setNative($('#sel-month'), '1');
 await until(() => ($('#date-label')?.textContent || '').includes('1 月'), 6000);
