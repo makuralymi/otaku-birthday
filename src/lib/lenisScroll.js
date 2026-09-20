@@ -202,3 +202,77 @@ export function enableSmoothScroll(getWrapper, tune = {}) {
     if (window.__lenis === lenis) window.__lenis = null;
   };
 }
+
+/**
+ * 水平区域平滑滚动（用于首屏角色横栏等）
+ * 复用全局 Lenis 平滑曲线（1.2s + easeOutCubic），将纵向滚轮/手势平滑映射到横向滚动
+ */
+export function enableHorizontalSmoothScroll(getWrapper, tune = {}) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => {};
+  const mq = (q) => (typeof window.matchMedia === 'function' ? window.matchMedia(q).matches : false);
+  if (mq('(prefers-reduced-motion: reduce)')) return () => {};
+  const touchPrimary = mq('(pointer: coarse)')
+    && ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0);
+  if (touchPrimary) return () => {};
+  if (typeof window.matchMedia !== 'function' || typeof window.ResizeObserver !== 'function') {
+    return () => {};
+  }
+
+  const el = typeof getWrapper === 'function' ? getWrapper() : getWrapper;
+  if (!el) return () => {};
+
+  if (window.Element && !window.Element.prototype.scrollTo) {
+    window.Element.prototype.scrollTo = function (opt) {
+      if (typeof opt === 'object' && opt !== null) {
+        if (typeof opt.left === 'number') this.scrollLeft = opt.left;
+        if (typeof opt.top === 'number') this.scrollTop = opt.top;
+      } else if (arguments.length >= 2) {
+        this.scrollLeft = arguments[0];
+        this.scrollTop = arguments[1];
+      }
+    };
+  }
+
+  let lenis = null;
+  try {
+    lenis = new Lenis({
+      wrapper: el,
+      content: el,
+      eventsTarget: el,
+      orientation: 'horizontal',
+      gestureOrientation: 'both',
+      duration: SMOOTH_OPTIONS.duration,
+      easing: SMOOTH_OPTIONS.easing,
+      smoothWheel: true,
+      smoothTouch: false,
+      wheelMultiplier: 1,
+      touchMultiplier: 1,
+      overscroll: false,
+      autoResize: true,
+      ...tune,
+    });
+  } catch (err) {
+    return () => {};
+  }
+
+  let raf = 0;
+  const loop = (time) => {
+    try {
+      lenis.raf(time);
+    } catch {
+      raf = 0;
+      return;
+    }
+    raf = requestAnimationFrame(loop);
+  };
+  raf = requestAnimationFrame(loop);
+
+  el.__lenis = lenis;
+
+  return () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    lenis.destroy();
+    if (el.__lenis === lenis) el.__lenis = null;
+  };
+}

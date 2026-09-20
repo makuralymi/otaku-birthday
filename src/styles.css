@@ -401,7 +401,10 @@ select:focus-visible, input:focus-visible { background-color: var(--panel); }
 }
 
 /* ── 人气预览 ─────────────────────────────────────────── */
-.gallery { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.gallery {
+  display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;
+  overscroll-behavior: contain;
+}
 .gallery-item {
   flex: 0 0 auto; width: 96px; padding: 0; cursor: pointer;
   border: 1px solid var(--g-line, var(--line));
@@ -747,10 +750,14 @@ body.intro-handoff .card.is-in {
 }
 
 /* ── 首屏随机预览（每次刷新换一批） ───────────────────── */
-.gallery-block { margin-top: 22px; }
+.gallery-block {
+  margin-top: 22px;
+  max-width: 1040px;
+  width: 100%;
+}
 .gallery-head {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin-bottom: 8px; max-width: 720px;
+  gap: 12px; margin-bottom: 8px; width: 100%;
 }
 .gallery-head .fine { color: var(--ink-3); }
 

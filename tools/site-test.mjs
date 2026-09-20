@@ -546,6 +546,31 @@ check('预览项仍可跳转到生日页', (() => {
   const label = item.getAttribute('title') || '';
   return /\d+\/\d+/.test(label);
 })(), $$('#gallery .gallery-item')[0]?.getAttribute('title'));
+check('预览横栏标记为原生滚动区（不被 Lenis 全局接管）',
+  $('#gallery')?.getAttribute('data-lenis-prevent') === 'true' &&
+  $('#gallery')?.getAttribute('data-native-scroll') === '1');
+const galleryEl = $('#gallery');
+check('预览横栏使用全局 Lenis 平滑滚动方案',
+  !!galleryEl?.__lenis && galleryEl.__lenis.isHorizontal,
+  `isHorizontal=${galleryEl?.__lenis?.isHorizontal}`);
+if (galleryEl) {
+  Object.defineProperty(galleryEl, 'clientWidth', { value: 1040, configurable: true });
+  Object.defineProperty(galleryEl, 'scrollWidth', { value: 2000, configurable: true });
+  galleryEl.__lenis?.resize();
+}
+const wheelEvt = new window.WheelEvent('wheel', {
+  deltaY: 80,
+  bubbles: true,
+  cancelable: true,
+});
+galleryEl?.dispatchEvent(wheelEvt);
+check('预览横栏滚轮阻止全局滚动并驱动平滑位移目标',
+  wheelEvt.defaultPrevented && galleryEl?.__lenis?.targetScroll === 80,
+  `prevented=${wheelEvt.defaultPrevented} targetScroll=${galleryEl?.__lenis?.targetScroll}`);
+galleryEl?.__lenis?.raf(Date.now() + 1200);
+check('预览横栏平滑推进横向滚动位移',
+  (galleryEl?.scrollLeft || 0) > 0,
+  `scrollLeft=${galleryEl?.scrollLeft}`);
 
 /* ── 10.97 关于区只保留「数据来源 / 自己更新数据」 ───── */
 const aboutText = $('#about')?.textContent || '';

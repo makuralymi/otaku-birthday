@@ -8,6 +8,7 @@ import { daysInMonth, monthName } from '../lib/data.js';
 import { flatPalette, parsePalette, hashColors } from '../lib/palette.js';
 import { placeholderURI } from '../lib/images.js';
 import { CLEAN_BUILD, LOCAL_IMAGES_ONLY } from '../lib/buildflags.js';
+import { enableHorizontalSmoothScroll } from '../lib/lenisScroll.js';
 
 /** 色板条：5 个纯色方块，跟随当前角色/当天主色 */
 export function PaletteBlocks({ palette, height = 10, className = '' }) {
@@ -144,6 +145,36 @@ function Gallery({ featured, onPick }) {
   const [batch, setBatch] = useState([]);
   useEffect(() => { setBatch(pickBatch(all)); }, [all]);
 
+  const galleryRef = useRef(null);
+
+  // 全局滚动的平滑方案（Lenis 水平平滑滚动）
+  useEffect(() => {
+    const el = galleryRef.current;
+    if (!el) return undefined;
+    const cleanupLenis = enableHorizontalSmoothScroll(() => el);
+    let fallbackCleanup = () => {};
+    if (!el.__lenis) {
+      const onWheelFallback = (e) => {
+        let delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (e.deltaMode === 1) delta *= 20;
+        else if (e.deltaMode === 2) delta *= window.innerHeight;
+        if (delta !== 0) el.scrollLeft += delta;
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      el.addEventListener('wheel', onWheelFallback, { passive: false });
+      fallbackCleanup = () => el.removeEventListener('wheel', onWheelFallback);
+    }
+    return () => {
+      cleanupLenis();
+      fallbackCleanup();
+    };
+  }, [all.length]);
+
+  useEffect(() => {
+    galleryRef.current?.__lenis?.resize();
+  }, [batch]);
+
   if (!all.length) return null;
   return (
     <section className="gallery-block" aria-label="随机角色预览">
@@ -158,7 +189,13 @@ function Gallery({ featured, onPick }) {
           换一批
         </button>
       </div>
-      <div className="gallery" id="gallery">
+      <div
+        className="gallery"
+        id="gallery"
+        ref={galleryRef}
+        data-lenis-prevent="true"
+        data-native-scroll="1"
+      >
         {batch.map((f) => (
           <button
             key={f.id}
